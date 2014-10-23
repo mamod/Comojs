@@ -1,0 +1,1 @@
+tcc "./src/loop/core.c" "include/thread/tinycthread.c" "include/http/http_parser.c" "-run -I./include -I/media/sf_shared/tcc/include -L. -L./include/duktape -lrt -lduktape -lpthread" src/main.c $*
