@@ -1,7 +1,10 @@
-//to run this example you need to
-//build dll.c as shared library
-
 var dll = require('./dll.como');
+exports.hi = function(){
+	print('Hi called from c');
+};
 
-console.log(dll.my_test());
-console.log(dll.my_test());
+exports.bye = function(){
+	print('Bye called from c');
+};
+
+console.log(dll.call_me());

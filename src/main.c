@@ -22,7 +22,6 @@ static const duk_function_list_entry bindings_funcs[] = {
     { "thread"      , init_binding_thread,   0 },
     { "io"          , init_binding_io,       0 },
     { "readline"    , init_binding_readline, 0 },
-    { "test"          , init_binding_test,   0 },
     { NULL          , NULL, 0 }
 };
 
@@ -191,21 +190,31 @@ static const int process_exit(duk_context *ctx) {
   * process.dlOpen(shared_library);
 ******************************************************************************/
 static const int process_dllOpen(duk_context *ctx) {
-    const char *filename = duk_get_string(ctx, 0);
-    void * handle = dlopen(filename, RTLD_LAZY);
+    const char *ModuleName = duk_get_string(ctx, 0);
+
+    void * handle = dlopen(ModuleName, RTLD_LAZY);
     if (!handle){
-        printf("ERROR\n");
+        printf("Loading Module %s Aborted\n", ModuleName);
         COMO_SET_ERRNO_AND_RETURN(ctx, EINVAL);
     }
 
-    typedef void (*init_t)(duk_context *ctx);
-    init_t func = (init_t) dlsym(handle, "init");
+    typedef void (*init_t)(duk_context *ctx, const char *ModuleName);
+    init_t func = (init_t) dlsym(handle, "_como_init_module");
 
     if (!func){
-        printf("ERROR\n");
+        printf("Loading Module %s Aborted\n", ModuleName);
         COMO_SET_ERRNO_AND_RETURN(ctx, EINVAL);
     }
-    func(ctx);
+
+    //register require for this module in global stash
+    duk_push_global_stash(ctx);
+    duk_get_prop_string(ctx, -1, "modules");
+    duk_push_string(ctx, ModuleName);
+    duk_dup(ctx, 1);
+    duk_put_prop(ctx, -3);
+
+    //init module
+    func(ctx, ModuleName);
     return 1;
 }
 
@@ -218,7 +227,7 @@ const duk_function_list_entry process_funcs[] = {
     { "cwd"     , process_cwd, 0 },
     { "eval"    , process_eval, 2 },
     { "sleep"   , process_sleep, 1 },
-    { "dllOpen"    , process_dllOpen, 1 },
+    { "dllOpen" , process_dllOpen, 2 },
     { "exit"    , process_exit, 1 },
     { NULL, NULL, 0 }
 };
@@ -305,13 +314,19 @@ int main(int argc, char *argv[], char** envp) {
     duk_put_prop_string(ctx, -2, "process");
     duk_pop(ctx);
     
+    /* Initialize global stash 'modules'. */
+    duk_push_global_stash(ctx);
+    duk_push_object(ctx);
+    duk_put_prop_string(ctx, -2, "modules");
+    duk_pop(ctx);
+
     if (duk_peval_file(ctx, "lib/main.js") != 0) {
         printf("%s\n", duk_safe_to_string(ctx, -2));
         duk_destroy_heap(ctx);
         exit(1);
     }
     duk_pop(ctx);  /* pop eval result */
-    
+
     //debug_top(ctx);
     duk_destroy_heap(ctx);
     return 0;
