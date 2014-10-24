@@ -80,7 +80,6 @@ como_platform_sleep (int timeout){
 #include "bindings/buffer.c"
 #include "bindings/socket.c"
 #include "bindings/io.c"
-#include "bindings/poll.c"
 #include "bindings/loop.c"
 #include "bindings/thread.c"
 #include "bindings/http-parser.c"
