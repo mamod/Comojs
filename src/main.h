@@ -3,9 +3,9 @@
 
 #include <assert.h>
 #include <errno.h>
+#define _COMO_CORE
 
 #ifdef _WIN32
-    
     #ifdef __TINYC__
         #include "tinycc/winsock2.h"
         #include "tinycc/mswsock.h"
@@ -65,33 +65,7 @@
     return DUK_RET_ERROR;      \
 } while(0)
 
-
 void create_new_thread_heap (duk_context *ctx, const char *worker);
-
-static void dump_stack(duk_context *ctx, const char *name) {
-    duk_idx_t i, n;
-    n = duk_get_top(ctx);
-    printf("%s (top=%ld):", name, (long) n);
-    for (i = 0; i < n; i++) {
-        printf(" ");
-        duk_dup(ctx, i);
-        printf("%s", duk_safe_to_string(ctx, -1));
-        duk_pop(ctx);
-    }
-    printf("\n");
-    fflush(stdout);
-}
-
-static void dump_global_object_keys(duk_context *ctx) {
-    /* Prints only non-enumerable keys. We can't use e.g.
-    * Object.getOwnPropertyNames() here because we might
-    * not have 'Object' any more.
-    */
-    duk_eval_string_noresult(ctx,
-    "(function () {\n"
-    " for (var k in this) { print('key:', k); }\n"
-    "})()\n");
-}
 
 como_platform_sleep (int timeout){
     #ifdef _WIN32
@@ -111,7 +85,6 @@ como_platform_sleep (int timeout){
 #include "bindings/thread.c"
 #include "bindings/http-parser.c"
 #include "bindings/readline.c"
-#include "bindings/test.c"
 
 #ifdef _WIN32
     #define PLATFORM "win32"
