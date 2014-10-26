@@ -37,9 +37,9 @@ void _ReadLineHandlecb (evHandle *h) {
         mtx_lock(&c->gMutex);
         duk_context *ctx = c->ctx;
         void *self = c->self;
-        duk_push_hobject(ctx, c->self);
+        duk_push_object_pointer(ctx, c->self);
         duk_get_prop_string(ctx, -1, "online");
-        duk_push_hobject(ctx, c->self);
+        duk_push_object_pointer(ctx, c->self);
         duk_push_string(ctx, c->line);
         duk_call_method(ctx, 1);
         free(c->line);
@@ -49,7 +49,7 @@ void _ReadLineHandlecb (evHandle *h) {
 }
 
 static const int _readline_start(duk_context *ctx) {
-    void *self = (void *)duk_require_hobject(ctx, 0);
+    void *self = (void *)duk_to_pointer(ctx, 0);
     
     coThreadReadLine *c = malloc(sizeof(*c));
     memset(c, 0, sizeof(*c));

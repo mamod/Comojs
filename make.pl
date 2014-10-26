@@ -1,6 +1,6 @@
 
 my $isWin = ($^O =~ /win32/i);
-my $buildStr = "gcc"
+my $buildStr = "gcc -w"
              . " -I./include"
              . " -L."
              . " include/duktape/duktape.c"

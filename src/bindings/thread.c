@@ -151,9 +151,9 @@ void _ThreadHandlecb (evHandle *h) {
         w = QUEUE_DATA(q, comoThreadQueue, queue);
         QUEUE_REMOVE(q);
         
-        duk_push_hobject(ctx, self);
+        duk_push_object_pointer(ctx, self);
         duk_get_prop_string(ctx, -1, "callback");
-        duk_push_hobject(ctx, self);
+        duk_push_object_pointer(ctx, self);
         duk_push_string(ctx, w->data_in);
         duk_push_number(ctx, w->id);
         duk_call_method(ctx, 2);
@@ -177,7 +177,7 @@ void _ThreadHandlecb (evHandle *h) {
 
 static const int _thread_create(duk_context *ctx) {
     const char *worker = duk_require_string(ctx, 0);
-    void *self = (void *)duk_require_hobject(ctx, 1);
+    void *self = duk_to_pointer(ctx, 1);
     
     //create new context
     duk_context *new_ctx = duk_create_heap(NULL, NULL, NULL, NULL, NULL);

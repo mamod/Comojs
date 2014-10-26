@@ -10,9 +10,9 @@ typedef struct coParser {
 do { \
     coParser *cp = p->data;\
     duk_context *ctx = cp->ctx;\
-    duk_push_hobject(ctx, cp->self);\
+    duk_push_object_pointer(ctx, cp->self);\
     duk_get_prop_string(ctx, -1, FOR);\
-    duk_push_hobject(ctx, cp->self);\
+    duk_push_object_pointer(ctx, cp->self);\
     if (len > 0){\
         duk_push_lstring(ctx, buf, len); \
     } else {\
@@ -75,7 +75,7 @@ static http_parser_settings settings_ = {
 
 static const int _http_parser_init(duk_context *ctx) {
     enum http_parser_type type = duk_require_int(ctx, 0);
-    void *self = (void *)duk_require_hobject(ctx, 1);
+    void *self = duk_to_pointer(ctx, 1);
     http_parser *p = malloc(sizeof(*p));
     if (p == NULL){
         COMO_SET_ERRNO_AND_RETURN(ctx, ENOMEM);
