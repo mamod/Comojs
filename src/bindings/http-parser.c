@@ -1,14 +1,14 @@
 #include "../include/http/http_parser.h"
 
-typedef struct coParser {
+typedef struct comoHttpParser {
     duk_context *ctx;
     void *self;
     void *cb;
-} coParser;
+} comoHttpParser;
 
 #define _JS_CB(FOR) \
 do { \
-    coParser *cp = p->data;\
+    comoHttpParser *cp = p->data;\
     duk_context *ctx = cp->ctx;\
     duk_push_object_pointer(ctx, cp->self);\
     duk_get_prop_string(ctx, -1, FOR);\
@@ -19,6 +19,8 @@ do { \
         duk_push_lstring(ctx, "", 0); \
     }\
     duk_call_method(ctx, 1);\
+    duk_pop_2(ctx);\
+    /*dump_stack(ctx, "PARSER");*/ \
     return duk_get_int(ctx, -1);\
 } while(0)
 
@@ -76,12 +78,13 @@ static http_parser_settings settings_ = {
 static const int _http_parser_init(duk_context *ctx) {
     enum http_parser_type type = duk_require_int(ctx, 0);
     void *self = duk_to_pointer(ctx, 1);
+
     http_parser *p = malloc(sizeof(*p));
     if (p == NULL){
         COMO_SET_ERRNO_AND_RETURN(ctx, ENOMEM);
     }
     
-    coParser *cp = malloc(sizeof(*cp));
+    comoHttpParser *cp = malloc(sizeof(*cp));
     cp->ctx = ctx;
     cp->self = self;
     p->data = cp;
@@ -118,7 +121,7 @@ static const duk_function_list_entry como_http_parser_funcs[] = {
     { "init"          , _http_parser_init, 2 },
     { "parse"         , _http_parser_parse, 3 },
     { "reinitialize"  , _http_parser_reinitialize, 2 },
-    { NULL         , NULL, 0 }
+    { NULL            , NULL, 0 }
 };
 
 static const int init_binding_parser(duk_context *ctx) {
