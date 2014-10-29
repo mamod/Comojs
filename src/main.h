@@ -33,6 +33,21 @@
     #include <dlfcn.h>
 #endif
 
+
+ void dump_stack(duk_context *ctx, const char *name) {
+    duk_idx_t i, n;
+    n = duk_get_top(ctx);
+    printf("%s (top=%ld):", name, (long) n);
+    for (i = 0; i < n; i++) {
+        printf(" ");
+        duk_dup(ctx, i);
+        printf("%s", duk_safe_to_string(ctx, -1));
+        duk_pop(ctx);
+    }
+    printf("\n");
+    fflush(stdout);
+}
+
 /* Need to define _wassert as tcc doesn't recognize it on win32 ?!!*/
 #ifndef _wassert
 #define _wassert assert

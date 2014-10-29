@@ -20,20 +20,6 @@ const char *_COMO_MODULE_PATH = "";
     #define COMO_MODULE_INIT(ctx, filename) EXTERNC _COMO_INIT
 #endif
 
-static void dump_stack(duk_context *ctx, const char *name) {
-    duk_idx_t i, n;
-    n = duk_get_top(ctx);
-    printf("%s (top=%ld):", name, (long) n);
-    for (i = 0; i < n; i++) {
-        printf(" ");
-        duk_dup(ctx, i);
-        printf("%s", duk_safe_to_string(ctx, -1));
-        duk_pop(ctx);
-    }
-    printf("\n");
-    fflush(stdout);
-}
-
 //FIXME : Error checking?
 static void como_require(duk_context *ctx, const char *file) {
     duk_push_global_stash(ctx);
