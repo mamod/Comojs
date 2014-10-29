@@ -46,6 +46,7 @@ int io_stop (evHandle* handle, int mask){
         QUEUE_REMOVE(&(io)->queue);
         handle_stop(handle);
         free(io);
+        free(handle->data);
         free(handle);
     }
     
