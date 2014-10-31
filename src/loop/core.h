@@ -1,7 +1,9 @@
 #include <stdlib.h>
+#include <assert.h>
 
 #define HANDLE_REF       0x20
 #define HANDLE_CLOSING   0x01
+#define HANDLE_CLOSED    0x10
 #define HANDLE_INTERNAL  0x80
 #define HANDLE_ACTIVE    0x40
 
@@ -15,6 +17,9 @@
 #ifdef _WIN32
     #ifdef __TINYC__
         #include "tinycc/winsock2.h"
+        #ifndef _wassert
+            #define _wassert assert
+        #endif
     #else
         #include <winsock2.h>
     #endif
@@ -81,6 +86,7 @@ int io_start (evHandle* handle, int fd, int mask);
 int io_stop (evHandle* handle, int mask);
 void loop_update_time (evLoop *loop);
 int loop_start (evLoop *loop, int type);
+int loop_close (evHandle *handle, void *cb);
 evLoop *loop_init ();
 evLoop *main_loop ();
 evHandle *handle_init (evLoop *loop, void *cb);

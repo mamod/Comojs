@@ -132,7 +132,6 @@ int timer_start (evHandle* handle,
 
 int timer_stop (evHandle* handle) {
     if (!handle || !_is_active(handle)) return 0;
-    
     evTimer *timer = handle->ev;
     heap_remove((struct heap*) &handle->loop->timer_heap,
               (struct heap_node*) &timer->heap_node,
@@ -212,12 +211,94 @@ evLoop *main_loop () {
     return gLoop;
 }
 
+void _make_close_pending(evHandle *handle) {
+    assert(handle->flags & HANDLE_CLOSING);
+    assert(!(handle->flags & HANDLE_CLOSED));
+    evLoop *loop = handle->loop;
+    QUEUE_INSERT_TAIL(&(loop)->closing_queue, &(handle)->handle_queue);
+    //handle->next_closing = loop->closing_handles;
+    //loop->closing_handles = handle;
+}
+
+int loop_close (evHandle *handle, void *close_cb) {
+    handle->flags |= HANDLE_CLOSING;
+    handle->cb = close_cb;
+    switch (handle->type) {
+        case EV_TIMER: {
+            timer_stop(handle);
+            break;
+        };
+
+        case EV_IO: {
+            //uv__pipe_close((uv_pipe_t*)handle);
+            printf("closing IO\n");
+            break;
+        };
+
+        default : {
+            printf("closing IO %i\n", handle->type);
+            break;
+        }
+    }
+
+    _make_close_pending(handle);
+    return 1;
+}
+
+static void _finish_close(evHandle* handle) {
+    /* Note: while the handle is in the UV_CLOSING state now, it's still possible
+    * for it to be active in the sense that uv__is_active() returns true.
+    * A good example is when the user calls uv_shutdown(), immediately followed
+    * by uv_close(). The handle is considered active at this point because the
+    * completion of the shutdown req is still pending.
+    */
+    assert(handle->flags & HANDLE_CLOSING);
+    assert(!(handle->flags & HANDLE_CLOSED));
+    handle->flags |= HANDLE_CLOSED;
+
+    switch (handle->type) {
+        case EV_IO:
+        case EV_TIMER:
+            break;
+
+        default:
+            assert(0);
+            break;
+    }
+
+    handle_unref(handle);
+    QUEUE_REMOVE(&handle->handle_queue);
+    if (handle->cb) {
+        handle->cb(handle);
+    }
+
+    handle->cb = NULL;
+    free(handle->data);
+    free(handle);
+}
+
+static void _run_closing_handles(evLoop *loop) {
+
+    QUEUE *q;
+    evHandle *w;
+
+    while (!QUEUE_EMPTY(&loop->closing_queue)) {
+        q = QUEUE_HEAD(&loop->closing_queue);
+        QUEUE_REMOVE(q);
+        QUEUE_INIT(q);
+
+        w = QUEUE_DATA(q, evHandle, handle_queue);
+        _finish_close(w);
+    }
+}
+
 int loop_start (evLoop *loop, int type){
     while (loop->active_handles){
         loop_update_time(loop);
         int timeout = next_timeout(loop);
         run_timers(loop);
-        
+        _run_closing_handles(loop);
+
         if (QUEUE_EMPTY(&loop->io_queue)) {
             #ifdef _WIN32
                 Sleep(timeout);
