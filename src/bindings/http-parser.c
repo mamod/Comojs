@@ -19,7 +19,7 @@ do { \
         duk_push_lstring(ctx, "", 0); \
     }\
     duk_call_method(ctx, 1);\
-    duk_pop_2(ctx);\
+    duk_pop(ctx);\
     /*dump_stack(ctx, "PARSER");*/ \
     return duk_get_int(ctx, -1);\
 } while(0)
