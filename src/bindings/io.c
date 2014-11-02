@@ -1,4 +1,7 @@
 #include <fcntl.h>
+#include <sys/time.h>
+#include <sys/types.h>
+
 
 #ifdef _WIN32
     #include "../../include/ansi/ANSI.h"
@@ -9,6 +12,9 @@
     #include <unistd.h>
 #endif
 
+/** 
+  * FIXME: io open
+******************************************************************************/
 static const int _io_open(duk_context *ctx) {
     const char *filename = duk_require_string(ctx, 0);
     int flag             = duk_require_int(ctx, 1);
@@ -29,6 +35,9 @@ static const int _io_open(duk_context *ctx) {
     return 1;
 }
 
+/** 
+  * io read
+******************************************************************************/
 static const int _io_read(duk_context *ctx) {
     int fd     = duk_require_int(ctx, 0);
     size_t len = (size_t)duk_get_int(ctx, 1);
@@ -47,6 +56,9 @@ static const int _io_read(duk_context *ctx) {
     return 1;
 }
 
+/** 
+  * io write
+******************************************************************************/
 static const int _io_write(duk_context *ctx) {
     int fd = duk_require_int(ctx, 0);
     size_t length;
@@ -79,10 +91,80 @@ static const int _io_write(duk_context *ctx) {
     return 1;
 }
 
+/** 
+  * can read
+******************************************************************************/
+static const int _io_can_read(duk_context *ctx) {
+    int fd      = duk_require_int(ctx, 0);
+    
+    int hasTimeout  = 0;
+    fd_set fds;
+    struct timeval tv;
+    int retval;
+
+    if (duk_is_number(ctx, 1)) {
+        hasTimeout = 1;
+        int timeout = duk_require_int(ctx, 1);
+        tv.tv_sec = 0;
+        tv.tv_usec = timeout*1000;
+    }
+
+    FD_ZERO(&fds);
+    FD_SET(fd, &fds);
+
+    retval = select(1, &fds, NULL, NULL, hasTimeout ? &tv : NULL);
+
+    if (retval == -1) {
+       COMO_SET_ERRNO_AND_RETURN(ctx, GET_LAST_ERROR);
+    } else if (retval) {
+       duk_push_int(ctx, 1);
+    } else {
+       duk_push_int(ctx, 0);
+    }
+
+    return 1;
+}
+
+/** 
+  * can write
+******************************************************************************/
+static const int _io_can_write(duk_context *ctx) {
+    int fd      = duk_require_int(ctx, 0);
+    
+    int hasTimeout  = 0;
+    fd_set fds;
+    struct timeval tv;
+    int retval;
+
+    if (duk_is_number(ctx, 1)) {
+        hasTimeout = 1;
+        int timeout = duk_require_int(ctx, 1);
+        tv.tv_sec = 0;
+        tv.tv_usec = timeout*1000;
+    }
+
+    FD_ZERO(&fds);
+    FD_SET(fd, &fds);
+
+    retval = select(1, NULL, &fds, NULL, hasTimeout ? &tv : NULL);
+
+    if (retval == -1) {
+       COMO_SET_ERRNO_AND_RETURN(ctx, GET_LAST_ERROR);
+    } else if (retval) {
+       duk_push_int(ctx, 1);
+    } else {
+       duk_push_int(ctx, 0);
+    }
+
+    return 1;
+}
+
 static const duk_function_list_entry como_io_funcs[] = {
-    { "read", _io_read,   3 },
-    { "open", _io_open,   3 },
-    { "write", _io_write, 2 },
+    { "read"      , _io_read,   3 },
+    { "open"      , _io_open,   3 },
+    { "write"     , _io_write, 2 },
+    { "can_read"  , _io_can_read, 2 },
+    { "can_write" , _io_can_write, 2 },
     { NULL, NULL, 0 }
 };
 
