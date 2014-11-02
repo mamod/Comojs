@@ -42,6 +42,10 @@
 #define EADDRNOTAVAIL WSAEADDRNOTAVAIL
 #endif
 
+#if !defined(ECONNREFUSED) && defined(_WIN32)
+#define ECONNREFUSED WSAECONNREFUSED
+#endif
+
 static const int _errno_toString(duk_context *ctx) {
     int ERRNO = duk_get_int(ctx,0);
     duk_push_string(ctx, strerror(ERRNO));
@@ -68,6 +72,7 @@ static const duk_number_list_entry errno_constants[] = {
     { "ESOCKTNOSUPPORT"    , ESOCKTNOSUPPORT},
     { "EPROTONOSUPPORT"    , EPROTONOSUPPORT},
     { "EADDRNOTAVAIL"      , EADDRNOTAVAIL},
+    { "ECONNREFUSED"       , ECONNREFUSED},
     
     #ifdef WSAEINVAL
     { "WSAEINVAL"          , WSAEINVAL},
