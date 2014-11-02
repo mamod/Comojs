@@ -11,6 +11,35 @@
 #endif
 
 /** 
+  * getprotobyname
+******************************************************************************/
+static const int _sock_getprotobyname(duk_context *ctx) {
+    const char* name = duk_require_string(ctx, 0);
+
+    int iResult = 0;
+    #ifdef _WIN32
+        WSADATA wsaData = {0};
+        iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (iResult != 0) {
+            COMO_SET_ERRNO_AND_RETURN(ctx, iResult);
+        }
+    #endif
+
+    struct protoent *proto = getprotobyname(name);
+    
+    #ifdef _WIN32
+        WSACleanup();
+    #endif
+
+    if (!proto){
+        COMO_SET_ERRNO_AND_RETURN(ctx, errno);
+    }
+
+    duk_push_int(ctx, proto->p_proto);
+    return 1;
+}
+
+/** 
   * pton4
 ******************************************************************************/
 static const int _sock_inet_pton4(duk_context *ctx) {
@@ -266,6 +295,7 @@ static const int _sock_connect(duk_context *ctx) {
     }
     
     if (connect(s, addr, addrlen) == SOCKET_ERROR){
+        //printf("Error: %i\n", GetSockError);
         COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
     }
     
@@ -361,7 +391,7 @@ static const int _sock_recv (duk_context *ctx) {
     if (n == -1){
         COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
     }
-    
+    if (n == 0) COMO_SET_ERRNO_AND_RETURN(ctx, EOF);
     if (n < len) duk_push_lstring(ctx, buf, n);
     return 1;
 }
@@ -378,7 +408,7 @@ static const int _sock_send (duk_context *ctx) {
     char *buf = duk_push_fixed_buffer(ctx, len);
     size_t n = send(fd, str, len, flags);
     if (n == -1){
-        printf("ERROR : %d\n", GetSockError);
+        printf("SEND ERROR : %d\n", GetSockError);
         COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
     }
     duk_push_int(ctx, (size_t)n);
@@ -424,24 +454,25 @@ static const int _sock_close(duk_context *ctx) {
   * socket functions list
 ******************************************************************************/
 static const duk_function_list_entry socket_funcs[] = {
-    { "pton4"      , _sock_inet_pton4, 2 },
-    { "pton6"      , _sock_inet_pton6, 2 },
-    { "pton"       , _sock_inet_pton, 2 },
-    { "ntop4"      , _sock_inet_ntop4, 1 },
-    { "ntop6"      , _sock_inet_ntop6, 1 },
-    { "ntop"       , _sock_inet_ntop, 1 },
-    { "family"     , _sock_inet_family, 1 },
-    { "socket"     , _sock_socket, 3 },
-    { "setsockopt" , _sock_setsockopt, 4 },
-    { "bind"       , _sock_bind, 2 },
-    { "listen"     , _sock_listen, 2 },
-    { "connect"    , _sock_connect, 3 },
-    { "accept"     , _sock_accept, 1 },
-    { "nonblock"   , _sock_nonblock, 2 },
-    { "recv"       , _sock_recv, 3},
-    { "send"       , _sock_send, 4},
-    { "shutdown"   , _sock_shutdown,2 },
-    { "close"      , _sock_close, 1 },
+    { "pton4"          , _sock_inet_pton4, 2 },
+    { "pton6"          , _sock_inet_pton6, 2 },
+    { "pton"           , _sock_inet_pton, 2 },
+    { "ntop4"          , _sock_inet_ntop4, 1 },
+    { "ntop6"          , _sock_inet_ntop6, 1 },
+    { "ntop"           , _sock_inet_ntop, 1 },
+    { "family"         , _sock_inet_family, 1 },
+    { "socket"         , _sock_socket, 3 },
+    { "setsockopt"     , _sock_setsockopt, 4 },
+    { "bind"           , _sock_bind, 2 },
+    { "listen"         , _sock_listen, 2 },
+    { "connect"        , _sock_connect, 3 },
+    { "accept"         , _sock_accept, 1 },
+    { "nonblock"       , _sock_nonblock, 2 },
+    { "recv"           , _sock_recv, 3},
+    { "send"           , _sock_send, 4},
+    { "shutdown"       , _sock_shutdown,2 },
+    { "close"          , _sock_close, 1 },
+    { "getprotobyname" , _sock_getprotobyname, 1},
     { NULL         , NULL, 0 }
 };
 
@@ -475,21 +506,21 @@ static const duk_number_list_entry socket_constants[] = {
     
     /* socket options */
     //SOL_SOCKET level
-    { "SOL_SOCKET"  , SOL_SOCKET },
-    { "SO_DEBUG ", SO_DEBUG },
-    { "SO_BROADCAST ", SO_BROADCAST },
-    { "SO_KEEPALIVE ", SO_KEEPALIVE },
-    { "SO_LINGER ", SO_LINGER },
-    { "SO_SNDBUF ", SO_SNDBUF },
-    { "SO_RCVBUF ", SO_RCVBUF },
-    { "SO_RCVTIMEO ", SO_RCVTIMEO },
-    { "SO_SNDTIMEO ", SO_SNDTIMEO },
-    { "SO_SNDLOWAT ", SO_SNDLOWAT },
-    { "SO_RCVLOWAT ", SO_RCVLOWAT },
-    { "SO_REUSEADDR", SO_REUSEADDR},
+    { "SOL_SOCKET"   , SOL_SOCKET },
+    { "SO_DEBUG"     , SO_DEBUG },
+    { "SO_BROADCAST" , SO_BROADCAST },
+    { "SO_KEEPALIVE" , SO_KEEPALIVE },
+    { "SO_LINGER"    , SO_LINGER },
+    { "SO_SNDBUF"    , SO_SNDBUF },
+    { "SO_RCVBUF"    , SO_RCVBUF },
+    { "SO_RCVTIMEO"  , SO_RCVTIMEO },
+    { "SO_SNDTIMEO"  , SO_SNDTIMEO },
+    { "SO_SNDLOWAT"  , SO_SNDLOWAT },
+    { "SO_RCVLOWAT"  , SO_RCVLOWAT },
+    { "SO_REUSEADDR" , SO_REUSEADDR},
     
     #ifdef SO_EXCLUSIVEADDRUSE
-    { "SO_EXCLUSIVEADDRUSE ", SO_EXCLUSIVEADDRUSE },
+    { "SO_EXCLUSIVEADDRUSE", SO_EXCLUSIVEADDRUSE },
     #endif
     
     #ifdef SO_NOSIGPIPE
@@ -526,6 +557,8 @@ static const duk_number_list_entry socket_constants[] = {
     #endif
     
     { "SOMAXCONN"   , SOMAXCONN },
+
+    { "INADDR_ANY"  , INADDR_ANY},
     { NULL, 0 }
 };
 
