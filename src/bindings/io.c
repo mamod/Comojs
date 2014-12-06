@@ -64,7 +64,7 @@ static const int _io_write(duk_context *ctx) {
     size_t length;
     const char *str = duk_require_lstring(ctx, 1, &length);
     
-    //FIXME run trhis only on tty device
+    //FIXME run this only on tty device
     #ifdef _WIN32
         HANDLE fileHandle = (HANDLE)_get_osfhandle(fd);
         if (fileHandle == INVALID_HANDLE_VALUE){
@@ -112,7 +112,7 @@ static const int _io_can_read(duk_context *ctx) {
     FD_ZERO(&fds);
     FD_SET(fd, &fds);
 
-    retval = select(1, &fds, NULL, NULL, hasTimeout ? &tv : NULL);
+    retval = select(fd + 1, &fds, NULL, NULL, hasTimeout ? &tv : NULL);
 
     if (retval == -1) {
        COMO_SET_ERRNO_AND_RETURN(ctx, GET_LAST_ERROR);
@@ -146,7 +146,7 @@ static const int _io_can_write(duk_context *ctx) {
     FD_ZERO(&fds);
     FD_SET(fd, &fds);
 
-    retval = select(1, NULL, &fds, NULL, hasTimeout ? &tv : NULL);
+    retval = select(fd + 1, NULL, &fds, NULL, hasTimeout ? &tv : NULL);
 
     if (retval == -1) {
        COMO_SET_ERRNO_AND_RETURN(ctx, GET_LAST_ERROR);
