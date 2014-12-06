@@ -10,7 +10,7 @@
 #include "core.h"
 
 inline void handle_start (evHandle *h);
-inline void handle_stop (evHandle *h);
+inline void handle_stop  (evHandle *h);
 
 #include "select.c"
 
@@ -47,14 +47,13 @@ void handle_unref (evHandle *h) {
 evHandle *handle_init (evLoop *loop, void *cb) {
     evHandle *handle = malloc(sizeof(*handle));
     handle->loop = loop;
-    
-    if (cb != NULL){
-        handle->cb = cb;
-    }
-    
+    QUEUE_INIT(&handle->queue);
     handle->type = 0;
+    handle->cb = cb;
+    handle->ev = NULL;
+    handle->close = NULL;
+    handle->data = NULL;
     handle->flags = HANDLE_REF;
-    //QUEUE_INSERT_TAIL(&(loop)->handle_queue, &(handle)->handle_queue);
     return handle;
 }
 
@@ -113,9 +112,9 @@ int timer_start (evHandle* handle,
     } else {
         timer = handle->ev;
     }
-    
+    //printf("timeout %u\n", timeout);
     uint64_t clamped_timeout = handle->loop->time + timeout;
-    if (clamped_timeout < timeout) clamped_timeout = (uint64_t) -1;
+    if (clamped_timeout < timeout) assert(0);
     timer->timeout = clamped_timeout;
     timer->repeat = repeat;
     timer->start_id = handle->loop->timer_counter++;
@@ -172,132 +171,89 @@ void run_timers(evLoop* loop) {
     }
 }
 
-void loop_update_time (evLoop *loop){
+static double hrtime_interval_ = 0;
+uint64_t loop_hrtime(int scale) {
     #ifdef _WIN32
-        loop->time = GetTickCount();
+        LARGE_INTEGER counter;
+        if (!hrtime_interval_){
+            static CRITICAL_SECTION process_title_lock;
+            LARGE_INTEGER perf_frequency;
+            InitializeCriticalSection(&process_title_lock);
+            if (QueryPerformanceFrequency(&perf_frequency)) {
+                hrtime_interval_ = 1.0 / perf_frequency.QuadPart;
+            } else {
+                hrtime_interval_= 0;
+            }
+        }
+
+        /* If the performance interval is zero, there's no support. */
+        if (hrtime_interval_ == 0) {
+            return 0;
+        }
+
+        if (!QueryPerformanceCounter(&counter)) {
+            return 0;
+        }
+
+        return (uint64_t) ((double) counter.QuadPart * hrtime_interval_ * scale);
     #else
         struct timeval tv;
         gettimeofday(&tv, NULL);
-        loop->time = tv.tv_sec * 1000 + tv.tv_usec/1000;
+        return (uint64_t) tv.tv_sec * scale + tv.tv_usec/scale;
     #endif
+}
+
+void loop_update_time (evLoop *loop){
+    loop->time = loop_hrtime(1000);
+    //printf("timeout %u\n", loop->time);
 }
 
 evLoop *gLoop;
 evLoop *loop_init (){
     evLoop *loop = malloc(sizeof(*loop));
     memset(loop, 0, sizeof(*loop));
+    
     loop->active_handles = 0;
     loop->stop = 0;
     loop->time = 0;
     loop->timer_counter = 0;
+    
+    //timer update
     loop_update_time(loop);
-    _ev_api_create(loop);
+    
+    //defined in select or any other
+    //io poll backend
+    loop_poll_create(loop);
+
     heap_init((struct heap*) &loop->timer_heap);
+    
     QUEUE_INIT(&loop->handle_queue);
     QUEUE_INIT(&loop->closing_queue);
     QUEUE_INIT(&loop->io_queue);
     
-    if (gLoop == NULL){
-        gLoop = loop;
-    }
+    if (gLoop == NULL) gLoop = loop;
     
     return loop;
 }
 
 evLoop *main_loop () {
-    if (gLoop == NULL){
-        gLoop = loop_init();
-    }
+    if (gLoop == NULL) gLoop = loop_init();
     return gLoop;
-}
-
-void _make_close_pending(evHandle *handle) {
-    assert(handle->flags & HANDLE_CLOSING);
-    assert(!(handle->flags & HANDLE_CLOSED));
-    evLoop *loop = handle->loop;
-    QUEUE_INSERT_TAIL(&(loop)->closing_queue, &(handle)->handle_queue);
-    //handle->next_closing = loop->closing_handles;
-    //loop->closing_handles = handle;
-}
-
-int loop_close (evHandle *handle, void *close_cb) {
-    handle->flags |= HANDLE_CLOSING;
-    handle->cb = close_cb;
-    switch (handle->type) {
-        case EV_TIMER: {
-            timer_stop(handle);
-            break;
-        };
-
-        case EV_IO: {
-            //uv__pipe_close((uv_pipe_t*)handle);
-            printf("closing IO\n");
-            break;
-        };
-
-        default : {
-            printf("closing IO %i\n", handle->type);
-            break;
-        }
-    }
-
-    _make_close_pending(handle);
-    return 1;
-}
-
-static void _finish_close(evHandle* handle) {
-    /* Note: while the handle is in the UV_CLOSING state now, it's still possible
-    * for it to be active in the sense that uv__is_active() returns true.
-    * A good example is when the user calls uv_shutdown(), immediately followed
-    * by uv_close(). The handle is considered active at this point because the
-    * completion of the shutdown req is still pending.
-    */
-    assert(handle->flags & HANDLE_CLOSING);
-    assert(!(handle->flags & HANDLE_CLOSED));
-    handle->flags |= HANDLE_CLOSED;
-
-    switch (handle->type) {
-        case EV_IO:
-        case EV_TIMER:
-            break;
-
-        default:
-            assert(0);
-            break;
-    }
-
-    handle_unref(handle);
-    QUEUE_REMOVE(&handle->handle_queue);
-    if (handle->cb) {
-        handle->cb(handle);
-    }
-
-    handle->cb = NULL;
-    free(handle->data);
-    free(handle);
-}
-
-static void _run_closing_handles(evLoop *loop) {
-
-    QUEUE *q;
-    evHandle *w;
-
-    while (!QUEUE_EMPTY(&loop->closing_queue)) {
-        q = QUEUE_HEAD(&loop->closing_queue);
-        QUEUE_REMOVE(q);
-        QUEUE_INIT(q);
-
-        w = QUEUE_DATA(q, evHandle, handle_queue);
-        _finish_close(w);
-    }
 }
 
 int loop_start (evLoop *loop, int type){
     while (loop->active_handles){
+        
         loop_update_time(loop);
-        int timeout = next_timeout(loop);
+        
+        int timeout;
+        if (type == 1){
+            timeout = 0;
+        } else {
+            timeout = next_timeout(loop);
+        }
+
         run_timers(loop);
-        _run_closing_handles(loop);
 
         if (QUEUE_EMPTY(&loop->io_queue)) {
             #ifdef _WIN32
@@ -305,10 +261,30 @@ int loop_start (evLoop *loop, int type){
             #else
                 usleep(1000 * timeout);
             #endif
-        } else {
+        }
+        else {
             io_poll(loop, timeout);
         }
         
+        /* closing handles */
+        QUEUE *q;
+        evHandle *handle;
+        while ( !QUEUE_EMPTY(&loop->closing_queue) ){
+            q = QUEUE_HEAD(&(loop)->closing_queue);
+            QUEUE_REMOVE(q);
+            handle = QUEUE_DATA(q, evHandle, queue);
+            assert(handle);
+            
+            if (handle->close != NULL){
+                handle->close(handle);
+            }
+
+            free(handle->ev);
+            free(handle->data);
+            free(handle);
+        }
+
+        /* run once */
         if (type == 1){
             break;
         }
