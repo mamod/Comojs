@@ -1,7 +1,12 @@
 var sock = process.binding('socket');
 var binding = process.binding('io');
-var loop = require('loop');
-var default_loop = loop.default_loop;
+var loop = require('loop').default_loop;
+var Stream = require('stream');
+
+var stream = new Stream;
+stream.readable = true;
+
+
 
 var httpParser = require('http_parser');
 var parser = new httpParser(httpParser.REQUEST);
@@ -12,9 +17,12 @@ var html =  "HTTP/1.1 200 OK\r\n" +
             "Hi There";
 
 //create new socket
-var s = sock.socket(sock.AF_INET, sock.SOCK_STREAM, 6);
+var s = sock.socket(sock.AF_INET, sock.SOCK_STREAM, 0);
 var ip = sock.pton('127.0.0.1', 9090);
-sock.bind(s, ip);
+
+if (!sock.bind(s, ip)){
+    throw new Error("can't bind");
+}
 
 if (!sock.setsockopt(s, sock.SOL_SOCKET,
                       sock.SO_REUSEADDR, 1)){
@@ -22,8 +30,13 @@ if (!sock.setsockopt(s, sock.SOL_SOCKET,
     throw new Error("error " . process.errno);
 }
 
-sock.nonblock(s, 1);
-sock.listen(s, sock.SOMAXCONN);
+if (!sock.nonblock(s, 1)){
+    throw('error');
+}
+
+if (!sock.listen(s, sock.SOMAXCONN)){
+    throw('listen');
+}
 
 var i = 0;
 function sockcb (handle, mask) {
@@ -37,22 +50,29 @@ function sockcb (handle, mask) {
         throw new Error("Error Setting Socket to nonblocking");
     }
     
-    var cl = default_loop.io_start(acceptSock, loop.POLLIN, function(h, mask){
-        print(i++);
+    var cl = loop.io_start(acceptSock, loop.POLLIN, function(h, mask){
+
         var raw = sock.recv(acceptSock, 1024);
-        
         parser.reinitialize(httpParser.REQUEST);
         parser.parse(raw);
+        //console.log(parser);
         
+        print(i++);
+
         sock.send(acceptSock, html, html.length, 0);
         sock.shutdown(acceptSock, 2);
         if (!sock.close(acceptSock)){
             throw new Error("cant close");
         }
         
-        default_loop.io_stop(cl, loop.POLLIN);
+        h.io_close();
     });
 }
 
-var handle = default_loop.io_start(s, loop.POLLIN, sockcb);
+var handle = loop.io_start(s, loop.POLLIN, sockcb);
 console.log("listening on port 9090");
+
+
+// setInterval(function(){
+//     print('running');
+// },1000);
