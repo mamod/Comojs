@@ -46,6 +46,22 @@
 #define ECONNREFUSED WSAECONNREFUSED
 #endif
 
+#if !defined(EINPROGRESS) && defined(_WIN32)
+#define EINPROGRESS WSAEINPROGRESS
+#endif
+
+#if !defined(EALREADY) && defined(_WIN32)
+#define EALREADY WSAEALREADY
+#endif
+
+#if !defined(EISCONN) && defined(_WIN32)
+#define EISCONN WSAEISCONN
+#endif
+
+#if !defined(ENOBUFS) && defined(_WIN32)
+#define ENOBUFS WSAENOBUFS
+#endif
+
 static const int _errno_toString(duk_context *ctx) {
     int ERRNO = duk_get_int(ctx,0);
     duk_push_string(ctx, strerror(ERRNO));
@@ -73,6 +89,11 @@ static const duk_number_list_entry errno_constants[] = {
     { "EPROTONOSUPPORT"    , EPROTONOSUPPORT},
     { "EADDRNOTAVAIL"      , EADDRNOTAVAIL},
     { "ECONNREFUSED"       , ECONNREFUSED},
+    { "EINPROGRESS"        , EINPROGRESS},
+    { "EALREADY"           , EALREADY},
+    { "EISCONN"            , EISCONN},
+    { "ENOBUFS"            , ENOBUFS},
+    { "EINTR"              , EINTR},
     
     #ifdef WSAEINVAL
     { "WSAEINVAL"          , WSAEINVAL},
