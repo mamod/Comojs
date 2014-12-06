@@ -1,8 +1,11 @@
-var socket = process.binding('socket');
+var socket = require('socket');
 var assert = require('assert');
 var errno = process.binding('errno');
 
 var isWin = process.platform == 'win32';
+var IPV6 = socket.hasIPv6;
+
+var gPORT = 9090;
 
 //creating ip4 & ip6 addresses
 (function(){
@@ -95,15 +98,27 @@ var isWin = process.platform == 'win32';
     assert.ok(typeof s == 'number');
     
     //local host ipv4
-    var ip = socket.pton('127.0.0.1', 9090);
+    //don't assume free port
+    var ip = socket.pton('127.0.0.1', 0);
     assert.ok(ip);
     
     //reuse address
     assert.ok(socket.setsockopt(s, socket.SOL_SOCKET,
                socket.SO_REUSEADDR, 1));
 
-    assert.ok(socket.bind(s, ip), process.errno); //socket is now bound to port 9090
+    //bind to free port
+    assert.ok(socket.bind(s, ip), process.errno);
+
+    var addr = socket.getsockname(s);
+    var info = socket.addr_info(addr);
+    assert.ok(info);
+
+    //set global port for later use
+    //this is for sure a free port
+    gPORT = info[1];
+
     assert.ok(!process.errno);
+
 
     //bind to unavailable local ip address
     var not_real_ip = socket.pton('46.185.254.40', 99);
@@ -111,21 +126,16 @@ var isWin = process.platform == 'win32';
     assert.ok(!socket.bind(s, not_real_ip));
     
     //FIXME: windows gives WSAEINVAL??
-    assert.ok(process.errno === errno.WSAEINVAL ||
-                 process.errno === errno.EADDRNOTAVAIL);
+    assert.ok(process.errno === errno.EINVAL ||
+                 process.errno === errno.EADDRNOTAVAIL,
+                 process.errno);
     
     assert.ok(socket.close(s));
     s = null;
     
-    /*
-     * check if tests platform supports ipv6 then test
-     * as winxp and old platforms in general doesn't
-     * support ipv6
-    */
-    
-    s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM, 0);
-    if (s) { //no error
-        var ip = socket.pton('::1', 9090); //localhost
+    if (IPV6) {
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM, 0);
+        var ip = socket.pton('::1', 0); //localhost
         assert.ok(ip);
 
         //reuse address
@@ -135,14 +145,17 @@ var isWin = process.platform == 'win32';
         assert.ok(socket.bind(s, ip));
         console.log('ipv6 version supported');
         assert.ok(socket.close(s));
+
     } else {
         //ipv6 not supported
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM, 0);
         assert.equal(process.errno, errno.EAFNOSUPPORT);
+        assert.ok(!socket.close(s));
     }
     
 })();
 
-
+//connect
 (function(){
     process.errno = 0;
     
@@ -151,14 +164,15 @@ var isWin = process.platform == 'win32';
     assert.ok(typeof s == 'number');
     
     //local host ipv4
-    var ip = socket.pton('127.0.0.1', 9090);
+    //we will use the free global port gPORT
+    var ip = socket.pton('127.0.0.1', gPORT);
     assert.ok(ip);
-
+    
     //reuse
     assert.ok(socket.setsockopt(s, socket.SOL_SOCKET,
                socket.SO_REUSEADDR, 1));
     
-    assert.ok(socket.bind(s, ip)); //socket is now bound to port 9090
+    assert.ok(socket.bind(s, ip));
     assert.ok(socket.listen(s, 1));
     
     var connectSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0);
@@ -214,3 +228,140 @@ var isWin = process.platform == 'win32';
     
 })();
 
+//getprotobyname
+(function(){
+    var proto = socket.getprotobyname('tcp');
+    assert.ok(proto);
+    assert.strictEqual(proto, socket.IPPROTO_TCP);
+})();
+
+
+// set/get socket options
+(function(){
+    var s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0);
+    assert.ok(s);
+    var opt;
+
+    //should throws type error
+    assert.throws(function() {
+        opt = socket.getsockopt(s, 'ss',
+               socket.SO_REUSEADDR);
+    }, TypeError);
+    
+    //not socket
+    opt = socket.getsockopt(0, socket.SOL_SOCKET,
+               socket.SO_REUSEADDR);
+    assert.ok(opt === null, process.errno);
+
+    //dummy option
+    opt = socket.getsockopt(s, socket.SOL_SOCKET,
+               9999);
+    assert.ok(opt === null, process.errno);
+
+
+    opt = socket.getsockopt(s, socket.SOL_SOCKET,
+               socket.SO_REUSEADDR);
+
+    //option is not set
+    assert.equal(opt, 0);
+
+    //set reuse address options
+    assert.ok(socket.setsockopt(s, socket.SOL_SOCKET,
+               socket.SO_REUSEADDR, 1));
+    
+
+    opt = socket.getsockopt(s, socket.SOL_SOCKET,
+               socket.SO_REUSEADDR);
+    assert.equal(opt, 1);
+
+    assert.ok(socket.close(s));
+})();
+
+// getpeername - getsockname - addr_info - getFamily
+(function(){
+    var ret;
+    var bindaddr;
+
+    var s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0);
+    assert.ok(s, process.errno);
+    
+    //getting sockname for unbound socket = error
+    ret = socket.getsockname(s);
+    //console.log(socket.addr_info(ret));
+    //fails on nix?!
+    // assert.ok(ret === null);
+    // assert.equal(process.errno, errno.EINVAL);
+    
+    process.errno = 0;
+
+    //any available port
+    var addr = socket.pton('127.0.0.1', 0);
+    
+    assert.ok(socket.bind( s, addr ));
+
+    bindaddr = socket.getsockname(s);
+    assert.ok(bindaddr);
+    assert.strictEqual(socket.ntop(bindaddr), '127.0.0.1');
+    
+
+    var addrinfo = socket.addr_info(bindaddr);
+    console.log(addrinfo);
+    assert(typeof addrinfo === 'object');
+    assert.strictEqual(addrinfo[0], '127.0.0.1');
+    assert.ok(typeof addrinfo[1] === 'number');
+
+    //getpeername
+
+    //listen, we need to connect to this address
+    //in order to get peernamne after connecting
+    assert.ok(socket.listen(s, 1));
+
+
+    var connectSock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0);
+    
+    //not connected => return null
+    assert(socket.getpeername(connectSock) === null);
+
+    //connect
+    assert.ok(socket.connect(connectSock, bindaddr), process.errno); //connect
+
+    //now we can get peerinfo
+    var peer = socket.getpeername(connectSock);
+    assert.ok(peer, process.errno);
+
+    //get peer address info
+    var peerinfo = socket.addr_info(peer);
+    assert.ok(peerinfo);
+    assert.equal(peerinfo[0], '127.0.0.1');
+    assert.ok(addrinfo[1] === peerinfo[1]);
+
+
+    assert.ok(socket.close(connectSock));
+    assert.ok(socket.close(s));
+
+})();
+
+
+
+//some ipv6 tests
+(function(){
+    if (!IPV6) return;
+
+    var addr = socket.pton6(socket.INADDR_ANY, 0);
+    assert.ok(addr);
+
+    var s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM, 0);
+    assert.ok(s);
+
+    assert.ok(socket.bind(s, addr), process.errno);
+    var bound = socket.getsockname(s);
+    assert.ok(bound);
+
+    var info = socket.addr_info(bound);
+    console.log(info);
+    assert.ok(info);
+
+    //make sure the bound address is ipv6
+    assert.ok(socket.isIP(info[0]) === 6, info);
+    assert.ok(socket.close(s));
+})();

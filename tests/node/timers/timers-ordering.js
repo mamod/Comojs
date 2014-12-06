@@ -1,5 +1,5 @@
 var assert = require('assert');
-var Timer  = require('timer_wrap').Timer;
+var Timer  = process.binding('timer_wrap').Timer;
 
 var i;
 var N = 30;
