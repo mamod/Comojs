@@ -1,3 +1,6 @@
+#ifndef _COMO_H
+#define _COMO_H
+
 #include "../include/duktape/duktape.h"
 
 const char *_COMO_MODULE_PATH = "";
@@ -34,9 +37,11 @@ static void como_import(duk_context *ctx, const char *prop, const char *module) 
     duk_get_prop_string(ctx, -1, prop);
 }
 
-#ifndef _COMO_CORE
+#ifndef _COMO_CORE_H
 COMO_MODULE_INIT (ctx, filename) {
     _COMO_MODULE_PATH = filename;
     _como_module_export(ctx,filename);
 }
 #endif
+
+#endif /*_COMO_H*/

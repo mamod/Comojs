@@ -14,6 +14,7 @@ Philosophy
 * Implement most things in javascript
 * Must maintaine a low footprint memory usage
 * Should run without compilation using tinycc compiler
+* Fast compilation time, current compilation time ~ 3 seconds
 
 Maybe
 -----

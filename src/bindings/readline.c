@@ -6,10 +6,10 @@ typedef struct {
     void *self;
     int size;
     mtx_t gMutex;
-} coThreadReadLine;
+} comoThreadReadLine;
 
-void _coReadLine (void *data) {
-    coThreadReadLine *c = data;
+void _comoReadLine (void *data) {
+    comoThreadReadLine *c = data;
     
     char buf[1024];
     char *res;
@@ -23,7 +23,7 @@ void _coReadLine (void *data) {
             if (res[len-1] == '\n') {
                 res[len-1] = '\0';
                 c->size = len;
-                c->line = malloc(sizeof(char) * len);
+                c->line = malloc(len);
                 strcpy(c->line, res);
             }
             mtx_unlock(&c->gMutex);
@@ -32,26 +32,30 @@ void _coReadLine (void *data) {
 }
 
 void _ReadLineHandlecb (evHandle *h) {
-    coThreadReadLine *c = h->data;
+    comoThreadReadLine *c = h->data;
     if (c->size > 0){
         mtx_lock(&c->gMutex);
         duk_context *ctx = c->ctx;
         void *self = c->self;
-        duk_push_object_pointer(ctx, c->self);
+        
+        duk_push_heapptr(ctx, c->self);
+        assert(duk_is_object(ctx, 0));
+
         duk_get_prop_string(ctx, -1, "online");
-        duk_push_object_pointer(ctx, c->self);
+        duk_push_heapptr(ctx, c->self);
         duk_push_string(ctx, c->line);
         duk_call_method(ctx, 1);
         free(c->line);
         c->size = 0;
+        duk_pop_n(ctx, 2);
         mtx_unlock(&c->gMutex);
     }
 }
 
 static const int _readline_start(duk_context *ctx) {
-    void *self = (void *)duk_to_pointer(ctx, 0);
+    void *self = duk_require_heapptr(ctx, 0);
     
-    coThreadReadLine *c = malloc(sizeof(*c));
+    comoThreadReadLine *c = malloc(sizeof(*c));
     memset(c, 0, sizeof(*c));
     c->ctx = ctx;
     c->self = self;
@@ -61,13 +65,13 @@ static const int _readline_start(duk_context *ctx) {
     mtx_init(&c->gMutex, mtx_plain);
     
     thrd_t t;
-    if (thrd_create(&t, (void *)_coReadLine, c) != thrd_success){
+    if (thrd_create(&t, (void *)_comoReadLine, c) != thrd_success ){
         assert(0 && "Can't Create Thread");
     }
     
     //FIXME: set a timer loop to check for new lines
     evLoop *loop = main_loop();
-    evHandle *h = handle_init(loop, _ReadLineHandlecb);
+    evHandle *h  = handle_init(loop, _ReadLineHandlecb);
     h->data = c;
     timer_start(h, 1, 1);
     

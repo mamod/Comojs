@@ -15,25 +15,24 @@ static int _dispatch_cb (evHandle *handle, int mask){
     duk_push_global_object(ctx);
     duk_push_object_pointer(ctx, cb);
     
-    if (handle->type == EV_IO){    
+    if (handle->type == EV_IO){
+        duk_push_pointer(ctx, handle); 
         duk_push_int(ctx, mask);
-        duk_call(ctx, 1);
+        duk_call(ctx, 2);
     } else {
         duk_push_pointer(ctx, handle);
         duk_call(ctx, 1);
     }
 
-    duk_pop_2(ctx);
-    //dump_stack(ctx, "LOOP");
+    duk_idx_t idx_top = duk_get_top_index(ctx);
+    duk_pop_n(ctx, idx_top + 1);
+    //dump_stack(ctx, "LOOP CALLBACK");
     return 1;
 }
 
 static int _close_cb (evHandle *handle){
     comoLoopHandle *data = handle->data;
     duk_idx_t idx_top;
-    if (!data){
-        return 1;
-    }
 
     duk_context *ctx = data->ctx;
     void *close_cb   = data->close_cb;
@@ -42,11 +41,16 @@ static int _close_cb (evHandle *handle){
         duk_push_object_pointer(ctx, close_cb);
         duk_push_pointer(ctx, handle);
         //FIXME
-        //duk_call(ctx, 1);
+        duk_call(ctx, 1);
         idx_top = duk_get_top_index(ctx);
         duk_pop_n(ctx, idx_top + 1);
     }
-    //dump_stack(ctx, "LOOP");
+
+    free(data);
+    free(handle);
+    data = NULL;
+    handle = NULL;
+    //dump_stack(ctx, "CLOSE CALLBACK");
     return 1;
 }
 
@@ -68,6 +72,24 @@ static const int _loop_unref(duk_context *ctx) {
     return 1;
 }
 
+static const int _loop_ref(duk_context *ctx) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    handle_ref(handle);
+    return 1;
+}
+
+static const int _loop_handle_stop(duk_context *ctx) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    handle_stop(handle);
+    return 1;
+}
+
+static const int _loop_handle_start(duk_context *ctx) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    handle_start(handle);
+    return 1;
+}
+
 static const int _loop_run(duk_context *ctx) {
     evLoop *loop = duk_require_pointer(ctx, 0);
     int type     = duk_get_int(ctx, 1);
@@ -84,9 +106,22 @@ static const int _loop_init_handle(duk_context *ctx) {
     comoLoopHandle *data = malloc(sizeof(*data));
     data->ctx = ctx;
     data->cb  = cb;
+    data->wrap = NULL;
     handle->data = data;
-
+    
     duk_push_pointer(ctx, handle);
+    return 1;
+}
+
+//change callback for already created handle
+static const int _loop_set_handle_cb(duk_context *ctx) {
+    evLoop *loop      = duk_require_pointer(ctx, 0);
+    void *cb          = duk_to_pointer(ctx, 1);
+
+    evHandle *handle  = handle_init(loop,_dispatch_cb);
+    comoLoopHandle *data = handle->data;
+    data->cb  = cb;
+    duk_push_int(ctx, 1);
     return 1;
 }
 
@@ -103,11 +138,16 @@ static const int _loop_timer_start(duk_context *ctx) {
     return 1;
 }
 
+static const int _loop_timer_again(duk_context *ctx) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    timer_again(handle);
+    return 1;
+}
+
 static const int _loop_io_start(duk_context *ctx) {
     evHandle *handle = duk_require_pointer(ctx, 0);
     int fd   = duk_get_int(ctx, 1);
     int mask = duk_get_int(ctx, 2);
-
     io_start(handle, fd, mask);
     return 1;
 }
@@ -119,10 +159,18 @@ static const int _loop_io_stop(duk_context *ctx) {
     return 1;
 }
 
+static const int _loop_io_active(duk_context *ctx) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    int mask = duk_get_int(ctx, 1);
+    int i = io_active(handle, mask);
+    duk_push_int(ctx, i);
+    return 1;
+}
+
 static const int _loop_update_time(duk_context *ctx) {
     evLoop *loop = duk_require_pointer(ctx, 0);
     loop_update_time(loop);
-    duk_push_int(ctx, (uint32_t)loop->time);
+    duk_push_uint(ctx, loop->time);
     return 1;
 }
 
@@ -143,28 +191,24 @@ static const int _loop_handle_unwrap(duk_context *ctx) {
     return 1;
 }
 
-static const int _loop_close(duk_context *ctx) {
-    evHandle *handle = duk_require_pointer(ctx, 0);
-    void *close_cb   = duk_to_pointer(ctx, 1);
-    comoLoopHandle *data = handle->data;
-    data->close_cb = close_cb;
-    loop_close(handle, _close_cb);
-    return 1;
-}
-
 static const duk_function_list_entry loop_funcs[] = {
     { "init_loop", _loop_init_loop, 0 },
     { "default_loop", _loop_default_loop, 0},
     { "init_handle", _loop_init_handle, 2 },
+    { "set_handle_cb", _loop_set_handle_cb, 2 },
     { "timer_start", _loop_timer_start, 4},
+    { "timer_again", _loop_timer_again, 1},
     { "io_start", _loop_io_start, 3 },
     { "io_stop", _loop_io_stop, 2   },
+    { "io_active", _loop_io_active, 2   },
     { "run_loop", _loop_run, 2 },
     { "update_time", _loop_update_time, 1},
     { "unref", _loop_unref, 1 },
+    { "ref", _loop_ref, 1 },
+    { "handle_stop", _loop_handle_stop, 1 },
+    { "handle_start", _loop_handle_start, 1 },
     { "handle_wrap", _loop_handle_wrap, 2},
     { "handle_unwrap", _loop_handle_unwrap, 1},
-    { "close", _loop_close,   2},
     { NULL, NULL, 0 }
 };
 

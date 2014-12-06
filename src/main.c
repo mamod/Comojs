@@ -14,14 +14,14 @@ extern char **environ;
 
 /* ALL Bindings ar directly included from main.h */
 static const duk_function_list_entry bindings_funcs[] = {
-    { "buffer"      , init_binding_buffer,   0 },
-    { "loop"        , init_binding_loop,     0 },
-    { "socket"      , init_binding_socket,   0 },
-    { "http-parser" , init_binding_parser,   0 },
-    { "errno"       , init_binding_errno,    0 },
-    { "thread"      , init_binding_thread,   0 },
-    { "io"          , init_binding_io,       0 },
-    { "readline"    , init_binding_readline, 0 },
+    { "worker"      , init_binding_worker,    0 },
+    { "buffer"      , init_binding_buffer,    0 },
+    { "loop"        , init_binding_loop,      0 },
+    { "socket"      , init_binding_socket,    0 },
+    { "http-parser" , init_binding_parser,    0 },
+    { "errno"       , init_binding_errno,     0 },
+    { "io"          , init_binding_io,        0 },
+    { "readline"    , init_binding_readline,  0 },
     { NULL          , NULL, 0 }
 };
 
@@ -232,54 +232,8 @@ const duk_function_list_entry process_funcs[] = {
     { NULL, NULL, 0 }
 };
 
-void create_new_thread_heap (duk_context *ctx, const char *worker) {
-    
-    duk_push_global_object(ctx);
-    duk_push_object(ctx);
-    duk_put_function_list(ctx, -1, process_funcs);
-    
-    /* process ENV */
-    _como_parse_environment(ctx, -2);
-    
-    /* argv */
-    duk_idx_t arr_idx = duk_push_array(ctx);
-    duk_push_string(ctx, "--thread");
-    duk_put_prop_index(ctx, arr_idx, 0);
-    
-    duk_push_string(ctx, worker);
-    duk_put_prop_index(ctx, arr_idx, 1);
-    duk_put_prop_string(ctx, -2, "argv");
-    
-    /* process id*/
-    duk_push_int(ctx, getpid());
-    duk_put_prop_string(ctx, -2, "pid");
-    
-    /* process platform*/
-    duk_push_string(ctx, PLATFORM);
-    duk_put_prop_string(ctx, -2, "platform");
-    
-    /* bindings */
-    duk_push_object(ctx);
-    duk_put_function_list(ctx, -1, bindings_funcs);
-    duk_put_prop_string(ctx, -2, "bindings");
-    
-    duk_put_prop_string(ctx, -2, "process");
-    duk_pop(ctx);
-    
-    //dump_global_object_keys(ctx);
-    if (duk_peval_file(ctx, "lib/main.js") != 0) {
-        printf("%s\n", duk_safe_to_string(ctx, -2));
-        duk_destroy_heap(ctx);
-        exit(1);
-    }
-    
-    duk_pop(ctx);  /* pop eval result */
-}
+duk_context *como_create_new_heap (int argc, char *argv[]) {
 
-int main(int argc, char *argv[], char** envp) {
-
-    (void) argc; (void) argv;
-    
     duk_context *ctx = duk_create_heap(NULL,NULL,NULL,NULL,NULL);
 
     duk_push_global_object(ctx);
@@ -320,11 +274,24 @@ int main(int argc, char *argv[], char** envp) {
     duk_put_prop_string(ctx, -2, "modules");
     duk_pop(ctx);
 
+    return ctx;
+}
+
+void como_run (duk_context *ctx){
     if (duk_peval_file(ctx, "lib/main.js") != 0) {
         printf("%s\n", duk_safe_to_string(ctx, -2));
         duk_destroy_heap(ctx);
         exit(1);
     }
+}
+
+int main(int argc, char *argv[], char** envp) {
+    (void) argc; (void) argv;
+    
+    mtx_init(&gMainThread, mtx_plain);
+    
+    duk_context *ctx = como_create_new_heap(argc, argv);
+    como_run(ctx);
     duk_pop(ctx);  /* pop eval result */
 
     //debug_top(ctx);

@@ -1,12 +1,17 @@
+#ifndef _COMO_CORE_H
+#define _COMO_CORE_H
+
 #include "duktape/duktape.h"
 #include "thread/tinycthread.h"
 
-#include <assert.h>
+mtx_t gMainThread;
+
 #include <errno.h>
-#define _COMO_CORE
+
 
 #ifdef _WIN32
     #ifdef __TINYC__
+        #include "tinycc/assert.h"
         #include "tinycc/winsock2.h"
         #include "tinycc/mswsock.h"
         #include "tinycc/ws2tcpip.h"
@@ -14,12 +19,13 @@
         #include <winsock2.h>
         #include <mswsock.h>
         #include <ws2tcpip.h>
+        #include <assert.h>
     #endif
-
     #include <windows.h>
     #define dlopen(x,y) (void*)LoadLibrary(x)
     #define dlclose(x) FreeLibrary((HMODULE)x)
 #else
+    #include <assert.h>
     #include <unistd.h>
     #include <sys/types.h>
     #include <sys/stat.h>
@@ -77,12 +83,32 @@
     fprintf(stderr, "\n\n--> ");   \
     fprintf(stderr, err);      \
     fprintf(stderr, "\n\n");     \
+    assert(0); \
     return DUK_RET_ERROR;      \
 } while(0)
 
-void create_new_thread_heap (duk_context *ctx, const char *worker);
 
-como_platform_sleep (int timeout){
+void como_run (duk_context *ctx);
+duk_context *como_create_new_heap (int argc, char *argv[]);
+
+typedef struct {
+    char *line;
+    duk_context *ctx;
+    void *self;
+    void* queue[2];
+    mtx_t gMutex;
+} comoChildThread;
+
+typedef struct {
+    int type;
+    void *data;
+    void* queue[2];
+} comoWorkerThread;
+
+comoChildThread *comoGobalThread;
+comoChildThread *como_globa_thread();
+
+void como_sleep (int timeout){
     #ifdef _WIN32
         Sleep(timeout);
     #else
@@ -90,15 +116,30 @@ como_platform_sleep (int timeout){
     #endif
 }
 
+
+#define _COMO_THREAD_START do \
+{\
+    printf("START\n");\
+    comoChildThread *c =  como_globa_thread();\
+    mtx_lock(&c->gMutex);\
+} while(0)
+
+#define _COMO_THREAD_END do \
+{\
+    printf("END\n");\
+    comoChildThread *c =  como_globa_thread();\
+    mtx_unlock(&c->gMutex);\
+} while(0)
+
 /* BINDINGS */
 #include "bindings/errno.c"
 #include "bindings/buffer.c"
 #include "bindings/socket.c"
 #include "bindings/io.c"
 #include "bindings/loop.c"
-#include "bindings/thread.c"
 #include "bindings/http-parser.c"
 #include "bindings/readline.c"
+#include "bindings/worker.c"
 
 #ifdef _WIN32
     #define PLATFORM "win32"
@@ -119,3 +160,7 @@ como_platform_sleep (int timeout){
 #elif __posix
     // POSIX
 #endif
+
+
+
+#endif /*_COMO_CORE_H*/
