@@ -758,6 +758,56 @@ static const int como_sock_close(duk_context *ctx) {
     return 1;
 }
 
+int hostname_to_ip(const char *hostname , const char *protocol, char *ip) {
+    int sockfd;  
+    struct addrinfo hints, *servinfo, *p;
+    struct sockaddr_in *h;
+    int rv;
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family   = AF_UNSPEC; // use AF_INET6 to force IPv6
+    hints.ai_socktype = SOCK_STREAM;
+ 
+    if ( (rv = getaddrinfo( hostname , protocol, &hints , &servinfo)) != 0) {
+        //fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return rv;
+    }
+
+    // loop through all the results and connect to the first we can
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+        h = (struct sockaddr_in *) p->ai_addr;
+        strcpy(ip , inet_ntoa( h->sin_addr ) );
+    }
+
+    freeaddrinfo(servinfo); // all done with this structure
+    return 0;
+}
+
+static const int como_host_to_ip (duk_context *ctx) {
+    const char *hostname = duk_require_string(ctx, 0);
+    const char *protocol = duk_require_string(ctx, 1);
+    char ip[100];
+    
+    #ifdef _WIN32
+        int iResult = 0;
+        WSADATA wsaData = {0};
+        iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (iResult != 0) {
+            COMO_SET_ERRNO_AND_RETURN(ctx, iResult);
+        }
+    #endif
+
+    int er = hostname_to_ip(hostname , protocol, ip);
+
+    #ifdef _WIN32
+        WSACleanup();
+    #endif
+
+    if (er){ COMO_SET_ERRNO_AND_RETURN(ctx, er); }
+    duk_push_string(ctx, ip);
+    return 1;
+}
+
 /*=============================================================================
   socket export functions list
  ============================================================================*/
@@ -768,6 +818,7 @@ static const duk_function_list_entry como_socket_funcs[] = {
     { "ntop4"          , como_sock_inet_ntop4, 1 },
     { "ntop6"          , como_sock_inet_ntop6, 1 },
     { "ntop"           , como_sock_inet_ntop, 1 },
+    {"host_to_ip"      , como_host_to_ip, 2},
     { "socket"         , como_sock_socket, 3 },
     { "setsockopt"     , como_sock_setsockopt, 4 },
     { "getsockopt"     , como_sock_getsockopt, 3 },
