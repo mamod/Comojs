@@ -13,7 +13,7 @@ static int _dispatch_cb (evHandle *handle, int mask){
     void *cb         = data->cb;
     
     duk_push_global_object(ctx);
-    duk_push_object_pointer(ctx, cb);
+    duk_push_heapptr(ctx, cb);
     
     if (handle->type == EV_IO){
         duk_push_pointer(ctx, handle); 
@@ -38,7 +38,7 @@ static int _close_cb (evHandle *handle){
     void *close_cb   = data->close_cb;
     if (close_cb){
         duk_push_global_object(ctx);
-        duk_push_object_pointer(ctx, close_cb);
+        duk_push_heapptr(ctx, close_cb);
         duk_push_pointer(ctx, handle);
         //FIXME
         duk_call(ctx, 1);
@@ -187,7 +187,7 @@ static const int _loop_handle_wrap(duk_context *ctx) {
 static const int _loop_handle_unwrap(duk_context *ctx) {
     evHandle *handle = duk_require_pointer(ctx, 0);
     comoLoopHandle *data = handle->data;
-    duk_push_object_pointer(ctx, data->wrap);
+    duk_push_heapptr(ctx, data->wrap);
     return 1;
 }
 
