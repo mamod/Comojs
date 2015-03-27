@@ -10,9 +10,9 @@ typedef struct comoHttpParser {
 do { \
     comoHttpParser *cp = p->data;\
     duk_context *ctx = cp->ctx;\
-    duk_push_object_pointer(ctx, cp->self);\
+    duk_push_heapptr(ctx, cp->self);\
     duk_get_prop_string(ctx, -1, FOR);\
-    duk_push_object_pointer(ctx, cp->self);\
+    duk_push_heapptr(ctx, cp->self);\
     if (len > 0){\
         duk_push_lstring(ctx, buf, len); \
     } else {\
@@ -102,8 +102,8 @@ size_t _http_parser_parse_thread (http_parser *p, const char *str, size_t len) {
 static const int _http_parser_parse(duk_context *ctx) {
     http_parser *p  = duk_require_pointer(ctx, 0);
     const char *str = duk_get_string(ctx, 1);
-    size_t len = duk_get_int(ctx, 2);
-    size_t nparsed = http_parser_execute(p, &settings_, str, len);
+    size_t len      = duk_get_int(ctx, 2);
+    size_t nparsed  = http_parser_execute(p, &settings_, str, len);
     duk_push_int(ctx, (size_t)nparsed);
     return 1;
 }
@@ -171,6 +171,14 @@ static const duk_number_list_entry como_http_parser_constants[] = {
     {"HTTP_REQUEST"  , HTTP_REQUEST},
     {"HTTP_RESPONSE" , HTTP_RESPONSE},
     {"HTTP_BOTH"     , HTTP_BOTH},
+    //request methods
+    {"HTTP_GET"      , HTTP_GET},
+    {"HTTP_PUT"      , HTTP_PUT},
+    {"HTTP_POST"     , HTTP_POST},
+    {"HTTP_DELETE"   , HTTP_DELETE},
+    {"HTTP_MSEARCH"  , HTTP_MSEARCH},
+    {"HTTP_PATCH"    , HTTP_PATCH},
+    {"HTTP_CONNECT"  , HTTP_CONNECT},
     { NULL, 0 }
 };
 
