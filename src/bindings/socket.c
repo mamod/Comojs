@@ -162,10 +162,10 @@ static const int como_sock_getpeername(duk_context *ctx) {
 static const int como_sock_getsockname(duk_context *ctx) {
     SOCKET sock = duk_require_int(ctx, 0);
 
-    struct sockaddr *addr = malloc(sizeof(*addr));
+    struct sockaddr_storage *addr = malloc(sizeof(*addr));
     memset(addr, 0, sizeof(*addr));
 
-    socklen_t len = sizeof(struct sockaddr);
+    socklen_t len = sizeof(struct sockaddr_storage);
     int result = getsockname(sock, (struct sockaddr *) addr, &len);
     if (result == 0) {
         duk_push_pointer(ctx, (void *)addr);
@@ -456,7 +456,7 @@ static const int como_sock_listen(duk_context *ctx) {
  ============================================================================*/
 static const int como_sock_connect(duk_context *ctx) {
     SOCKET s              = duk_require_int(ctx, 0);
-    struct sockaddr *addr = duk_require_pointer(ctx,1);
+    struct sockaddr *addr = duk_require_pointer(ctx, 1);
     
     unsigned int addrlen;
     if (addr->sa_family == AF_INET){
@@ -468,7 +468,6 @@ static const int como_sock_connect(duk_context *ctx) {
     }
     
     if (connect(s, addr, addrlen) == SOCKET_ERROR){
-        //printf("Error: %i\n", GetSockError);
         COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
     }
     
