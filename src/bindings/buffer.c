@@ -1,5 +1,3 @@
-#include <sys/types.h>
-
 #if !defined(MIN)
     #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
@@ -39,6 +37,7 @@ static const int unbase64_table[] =
 ,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
 ,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
 };
+
 #define unbase64(x) unbase64_table[(uint8_t)(x)]
 
 unsigned hex2bin(char c) {
@@ -48,7 +47,7 @@ unsigned hex2bin(char c) {
     return -1;
 }
 
-const enum Encodings {
+enum Encodings {
     ASCII = 1,
     UTF8,
     HEX,
@@ -177,7 +176,6 @@ static const int como_ascii_slice(duk_context *ctx, char *buffer,
 
     //only force ascii if byteslength > chars length
     if (len > charLen){
-        //dst = (char *)malloc(len);
         force_ascii_slow(src, dst, len);
     }
 
@@ -189,7 +187,7 @@ static const int como_ascii_slice(duk_context *ctx, char *buffer,
 /*=============================================================================
   COMO BUFFER slice
  ============================================================================*/
-static const int como_buffer_slice(duk_context *ctx) {
+COMO_METHOD(como_buffer_slice) {
     //buffer
     size_t sz;
     char *buffer = duk_require_buffer(ctx, 0, &sz);
@@ -205,6 +203,8 @@ static const int como_buffer_slice(duk_context *ctx) {
         case BASE64 : return como_base64_slice(ctx, buffer, start, end);
         case ASCII  : return como_ascii_slice(ctx, buffer, start, end);
         case BINARY : return como_ascii_slice(ctx, buffer, start, end);
+        case UCS2   : assert(0 && "UCS2 not supported");
+        default     : assert(0 && "unknown encoding");
     }
 
     duk_error(ctx, DUK_ERR_TYPE_ERROR, "Unknown Encoding");
@@ -215,15 +215,13 @@ static const int como_buffer_slice(duk_context *ctx) {
   UTF8 write
  ============================================================================*/
 size_t como_utf8_write (size_t max,
-                             const char* src,
-                             const char* srcEnd,
-                             char* dst,
-                             char* dstEnd){
+                             const char *src,
+                             const char *srcEnd,
+                             char *dst,
+                             char *dstEnd){
     
     size_t length = 0;
-    size_t offset = 0;
     while (src < srcEnd && dst < dstEnd) {
-        unsigned long ch;
         int nb;
         nb = UTF8ExtraBytes[(unsigned char)*src];
         /* fast case */
@@ -346,7 +344,7 @@ size_t como_ascii_write (const char* start,
 /*=============================================================================
   COMO BUFFER write
  ============================================================================*/
-static const int como_buffer_write(duk_context *ctx) {
+COMO_METHOD(como_buffer_write) {
 
     //buffer
     size_t bufferSize;
@@ -433,7 +431,7 @@ static const int como_buffer_write(duk_context *ctx) {
 /*=============================================================================
   BUFFER fill
  ============================================================================*/
-static const int como_buffer_fill(duk_context *ctx) {
+COMO_METHOD(como_buffer_fill) {
     
     //buffer
     size_t bufferSize;
@@ -489,7 +487,7 @@ static const int como_buffer_fill(duk_context *ctx) {
 /*=============================================================================
   BUFFER Copy
  ============================================================================*/
-static const int como_buffer_copy(duk_context *ctx) {
+COMO_METHOD(como_buffer_copy) {
     
     //buffer
     size_t source_length;
@@ -521,10 +519,10 @@ static const int como_buffer_copy(duk_context *ctx) {
 /*=============================================================================
   COMO BUFFER write
  ============================================================================*/
-static const int como_buffer_create(duk_context *ctx) {
-    //string
-    size_t length;
-    const char *string  = duk_require_lstring(ctx, 0, &length);
+COMO_METHOD(como_buffer_create) {
+    
+    //length
+    size_t length  = duk_get_length(ctx, 0);
 
     //create new buffer
     duk_push_buffer(ctx, length, 1);
@@ -560,7 +558,7 @@ static const int como_buffer_create(duk_context *ctx) {
 /*=============================================================================
   COMO BUFFER compare
  ============================================================================*/
-static const int como_buffer_compare(duk_context *ctx) {
+COMO_METHOD(como_buffer_compare) {
     
     //buffer a
     size_t obj_a_len;
@@ -588,7 +586,7 @@ static const int como_buffer_compare(duk_context *ctx) {
 /*=============================================================================
   BUFFER foreach
  ============================================================================*/
-static const int como_buffer_foreach(duk_context *ctx) {
+COMO_METHOD(como_buffer_foreach) {
     
     //buffer
     size_t length;
@@ -603,7 +601,6 @@ static const int como_buffer_foreach(duk_context *ctx) {
         Str[0] = (unsigned char)buffer[i];
         if (nb > 0){
             
-            //there is no 
             if (i+nb >= length){
                 return 1;
             }
@@ -624,7 +621,6 @@ static const int como_buffer_foreach(duk_context *ctx) {
         }
 
         duk_pop(ctx); //stack => [ function cb (){} ]
-        //dump_stack(ctx, "DUP");
     }
     
     return 1;
@@ -654,7 +650,7 @@ static const duk_number_list_entry como_buffer_constants[] = {
     { NULL,     0      }
 };
 
-static const int init_binding_buffer(duk_context *ctx) {
+static int init_binding_buffer(duk_context *ctx) {
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, como_buffer_funcs);
     duk_push_object(ctx);

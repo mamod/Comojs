@@ -1,150 +1,233 @@
 #include "../loop/core.h"
 
-typedef struct comoLoopHandle {
-    duk_context *ctx;
-    void *wrap;
-    void *cb;
-    void *close_cb;
-} comoLoopHandle;
-
-static int _dispatch_cb (evHandle *handle, int mask){
-    comoLoopHandle *data = handle->data;
-    duk_context *ctx = data->ctx;
-    void *cb         = data->cb;
-    
+evLoop *como_main_loop(duk_context *ctx) {
     duk_push_global_object(ctx);
-    duk_push_heapptr(ctx, cb);
+    duk_get_prop_string(ctx, -1, "process");
+    duk_get_prop_string(ctx, -1, "main_loop");
+    evLoop *loop = duk_require_pointer(ctx, -1);
+    duk_pop_n(ctx, 3);
+    return loop;
+}
+
+static int como_loop_handle_close(duk_context *ctx);
+static int _handle_dispatch_cb (evHandle *handle, int mask){
+
+    duk_context *ctx = handle->loop->data;
+
+    duk_push_global_stash(ctx);
+    duk_get_prop_string(ctx, -1, "comoHandles");
+    duk_push_number(ctx, (double) handle->id);
+    duk_get_prop(ctx, -2);
     
     if (handle->type == EV_IO){
-        duk_push_pointer(ctx, handle); 
+        duk_push_pointer(ctx, handle);
         duk_push_int(ctx, mask);
         duk_call(ctx, 2);
     } else {
+        duk_dup(ctx, -1);
         duk_push_pointer(ctx, handle);
-        duk_call(ctx, 1);
+        duk_call_method(ctx, 1);
     }
 
     duk_idx_t idx_top = duk_get_top_index(ctx);
     duk_pop_n(ctx, idx_top + 1);
-    //dump_stack(ctx, "LOOP CALLBACK");
-    return 1;
-}
 
-static int _close_cb (evHandle *handle){
-    comoLoopHandle *data = handle->data;
-    duk_idx_t idx_top;
-
-    duk_context *ctx = data->ctx;
-    void *close_cb   = data->close_cb;
-    if (close_cb){
-        duk_push_global_object(ctx);
-        duk_push_heapptr(ctx, close_cb);
-        duk_push_pointer(ctx, handle);
-        //FIXME
-        duk_call(ctx, 1);
-        idx_top = duk_get_top_index(ctx);
-        duk_pop_n(ctx, idx_top + 1);
+    if (handle->type == EV_TIMER){
+        evTimer *timer = handle->ev;
+        if (timer->repeat == 0){
+            duk_push_pointer(ctx, handle);
+            como_loop_handle_close(ctx);
+        }
     }
-
-    free(data);
-    free(handle);
-    data = NULL;
-    handle = NULL;
-    //dump_stack(ctx, "CLOSE CALLBACK");
     return 1;
 }
 
-static const int _loop_default_loop(duk_context *ctx) {
+/*=============================================================================
+  initate new loop
+  loop.init();
+ ============================================================================*/
+COMO_METHOD(como_loop_init) {
     evLoop *loop = loop_init();
+    loop->data = ctx;
     duk_push_pointer(ctx, loop);
     return 1;
 }
 
-static const int _loop_init_loop(duk_context *ctx) {
-    evLoop *loop = loop_init();
+/*=============================================================================
+  get main loop
+  loop.main();
+ ============================================================================*/
+COMO_METHOD(como_loop_main) {
+    evLoop *loop = main_loop();
+    loop->data = ctx;
     duk_push_pointer(ctx, loop);
     return 1;
 }
 
-static const int _loop_unref(duk_context *ctx) {
+/*=============================================================================
+  start running loop
+  loop.run(loop_pointer, [0|1]);
+ ============================================================================*/
+COMO_METHOD(como_loop_run) {
+    evLoop *loop = duk_require_pointer(ctx, 0);
+    int type     = duk_get_int(ctx, 1); /* || 0 */
+
+    int active = loop_start(loop, type);
+    duk_push_int(ctx, active);
+    return 1;
+}
+
+
+/* handle functions */
+
+/*=============================================================================
+  initaite new handle
+  loop.handle_init(loop_pointer, callback);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_init) {
+    evLoop *loop      = duk_require_pointer(ctx, 0);
+
+    evHandle *handle  = handle_init(loop, _handle_dispatch_cb);
+    int64_t handle_id = handle->id;
+
+    duk_push_global_stash(ctx);
+    duk_get_prop_string(ctx, -1, "comoHandles");
+    duk_push_number(ctx, (double) handle_id);
+    duk_dup(ctx, 1);
+    duk_put_prop(ctx, -3); /* comoHandles[handle_id] = callback */
+
+    duk_push_pointer(ctx, handle);
+    return 1;
+}
+
+/*=============================================================================
+  associate javascript object/function with handle
+  loop.handle_wrap(handle_pointer, obj);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_wrap) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    void *this       = duk_require_heapptr(ctx, 1);
+    handle->data  = this;
+    return 1;
+}
+
+/*=============================================================================
+  get javascript object/function associated with handle
+  loop.handle_unwrap(handle_pointer);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_unwrap) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    void *this      = handle->data;
+    duk_push_heapptr(ctx, this);
+    return 1;
+}
+
+/*=============================================================================
+  handle call on next call immediately
+  loop.handle_call(handle);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_call) {
+    evHandle *handle      = duk_require_pointer(ctx, 0);
+    handle_call(handle);
+    return 1;
+}
+
+/*=============================================================================
+  unref handle
+  loop.handle_unref(handle);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_unref) {
     evHandle *handle = duk_require_pointer(ctx, 0);
     handle_unref(handle);
     return 1;
 }
 
-static const int _loop_ref(duk_context *ctx) {
+/*=============================================================================
+  ref handle, ref unrefed handle
+  loop.handle_ref(handle);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_ref) {
     evHandle *handle = duk_require_pointer(ctx, 0);
     handle_ref(handle);
     return 1;
 }
 
-static const int _loop_handle_stop(duk_context *ctx) {
-    evHandle *handle = duk_require_pointer(ctx, 0);
-    handle_stop(handle);
-    return 1;
-}
-
-static const int _loop_handle_start(duk_context *ctx) {
+/*=============================================================================
+  start inactive handle or previous stopped handle
+  loop.handle_start(handle);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_start) {
     evHandle *handle = duk_require_pointer(ctx, 0);
     handle_start(handle);
     return 1;
 }
 
-static const int _loop_run(duk_context *ctx) {
-    evLoop *loop = duk_require_pointer(ctx, 0);
-    int type     = duk_get_int(ctx, 1);
-
-    loop_start(loop, type);
-    return 1;
-}
-
-static const int _loop_init_handle(duk_context *ctx) {
-    evLoop *loop      = duk_require_pointer(ctx, 0);
-    void *cb          = duk_to_pointer(ctx, 1);
-
-    evHandle *handle  = handle_init(loop,_dispatch_cb);
-    comoLoopHandle *data = malloc(sizeof(*data));
-    data->ctx = ctx;
-    data->cb  = cb;
-    data->wrap = NULL;
-    handle->data = data;
-    
-    duk_push_pointer(ctx, handle);
-    return 1;
-}
-
-//change callback for already created handle
-static const int _loop_set_handle_cb(duk_context *ctx) {
-    evLoop *loop      = duk_require_pointer(ctx, 0);
-    void *cb          = duk_to_pointer(ctx, 1);
-
-    evHandle *handle  = handle_init(loop,_dispatch_cb);
-    comoLoopHandle *data = handle->data;
-    data->cb  = cb;
-    duk_push_int(ctx, 1);
-    return 1;
-}
-
-static const int _loop_timer_start(duk_context *ctx) {
+/*=============================================================================
+  stop handle, stopping the handle doesn't close it, so you can start it 
+  again by doing handle_start, to stop handle for good, use handle_close
+  
+  loop.handle_stop(handle);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_stop) {
     evHandle *handle = duk_require_pointer(ctx, 0);
-    void *cb         = duk_to_pointer(ctx, 1);
-    int timeout      = duk_get_int(ctx, 2);
-    int repeat       = duk_get_int(ctx, 3);
+    handle_stop(handle);
+    return 1;
+}
 
-    comoLoopHandle *data = handle->data;
-    data->cb = cb;
+/*=============================================================================
+  close handle, this will close handle and free al it's resources, closed 
+  handles can't be restarted again.
+  
+  loop.handle_close(handle);
+ ============================================================================*/
+COMO_METHOD(como_loop_handle_close) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+
+    /* first remove handle reference from global stash */
+    duk_push_global_stash(ctx);
+    duk_get_prop_string(ctx, -1, "comoHandles");
+    duk_push_number(ctx, (double) handle->id);
+    duk_del_prop(ctx, -2);
+
+    handle_close(handle);
+    return 1;
+}
+
+
+
+/* timer functions */
+
+/*=============================================================================
+  start timer
+  loop.timer_start(handle, timeout, repeat);
+ ============================================================================*/
+COMO_METHOD(como_loop_timer_start) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    int timeout      = duk_get_int(ctx, 1);
+    int repeat       = duk_get_int(ctx, 2);
 
     timer_start(handle, timeout, repeat);
     return 1;
 }
 
-static const int _loop_timer_again(duk_context *ctx) {
+/*=============================================================================
+  start timer again
+  loop.timer_again(handle);
+ ============================================================================*/
+COMO_METHOD(como_loop_timer_again) {
     evHandle *handle = duk_require_pointer(ctx, 0);
     timer_again(handle);
     return 1;
 }
 
-static const int _loop_io_start(duk_context *ctx) {
+
+/* IO functions */
+
+/*=============================================================================
+  io start
+  loop.io_start(handle, [loop.POLLIN | loop.POLLOUT | loop.POLLERR]);
+ ============================================================================*/
+COMO_METHOD(como_loop_io_start) {
     evHandle *handle = duk_require_pointer(ctx, 0);
     int fd   = duk_get_int(ctx, 1);
     int mask = duk_get_int(ctx, 2);
@@ -152,63 +235,75 @@ static const int _loop_io_start(duk_context *ctx) {
     return 1;
 }
 
-static const int _loop_io_stop(duk_context *ctx) {
+/*=============================================================================
+  io stop : stop watching io handle for some or all events
+  loop.io_stop(handle, [loop.POLLIN | loop.POLLOUT | loop.POLLERR]);
+ ============================================================================*/
+COMO_METHOD(como_loop_io_stop) {
     evHandle *handle = duk_require_pointer(ctx, 0);
-    int mask = duk_get_int(ctx, 1);
-    io_stop(handle, mask);
+    int event = duk_get_int(ctx, 1);
+    io_stop(handle, event);
     return 1;
 }
 
-static const int _loop_io_active(duk_context *ctx) {
+COMO_METHOD(como_loop_io_remove) {
     evHandle *handle = duk_require_pointer(ctx, 0);
-    int mask = duk_get_int(ctx, 1);
-    int i = io_active(handle, mask);
+    int event = duk_get_int(ctx, 1);
+    io_remove(handle, event);
+    return 1;
+}
+
+/*=============================================================================
+  io active : check if io handle is active for the given event
+  loop.io_active(handle, event); => 1 if active 0 otherwise
+ ============================================================================*/
+COMO_METHOD(como_loop_io_active) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    int event = duk_get_int(ctx, 1);
+    int i = io_active(handle, event);
     duk_push_int(ctx, i);
     return 1;
 }
 
-static const int _loop_update_time(duk_context *ctx) {
+/*=============================================================================
+  update time : update loop timer internally
+  loop.update_time(loop); => 1 if active 0 otherwise
+ ============================================================================*/
+COMO_METHOD(como_loop_update_time) {
     evLoop *loop = duk_require_pointer(ctx, 0);
     loop_update_time(loop);
     duk_push_uint(ctx, loop->time);
     return 1;
 }
 
-static const int _loop_handle_wrap(duk_context *ctx) {
-    evHandle *handle = duk_require_pointer(ctx, 0);
-    void *wrap       = duk_to_pointer(ctx, 1);
-
-    comoLoopHandle *data = handle->data;
-    data->wrap = wrap;
-
-    return 1;
-}
-
-static const int _loop_handle_unwrap(duk_context *ctx) {
-    evHandle *handle = duk_require_pointer(ctx, 0);
-    comoLoopHandle *data = handle->data;
-    duk_push_heapptr(ctx, data->wrap);
-    return 1;
-}
-
 static const duk_function_list_entry loop_funcs[] = {
-    { "init_loop", _loop_init_loop, 0 },
-    { "default_loop", _loop_default_loop, 0},
-    { "init_handle", _loop_init_handle, 2 },
-    { "set_handle_cb", _loop_set_handle_cb, 2 },
-    { "timer_start", _loop_timer_start, 4},
-    { "timer_again", _loop_timer_again, 1},
-    { "io_start", _loop_io_start, 3 },
-    { "io_stop", _loop_io_stop, 2   },
-    { "io_active", _loop_io_active, 2   },
-    { "run_loop", _loop_run, 2 },
-    { "update_time", _loop_update_time, 1},
-    { "unref", _loop_unref, 1 },
-    { "ref", _loop_ref, 1 },
-    { "handle_stop", _loop_handle_stop, 1 },
-    { "handle_start", _loop_handle_start, 1 },
-    { "handle_wrap", _loop_handle_wrap, 2},
-    { "handle_unwrap", _loop_handle_unwrap, 1},
+    { "init", como_loop_init, 0 },
+    { "main", como_loop_main, 0 },
+    { "run", como_loop_run,   2 },
+
+    /* handle functions */
+    { "handle_init",    como_loop_handle_init,   2 },
+    { "handle_unref",   como_loop_handle_unref,  1 },
+    { "handle_ref",     como_loop_handle_ref,    1 },
+    { "handle_stop",    como_loop_handle_stop,   1 },
+    { "handle_start",   como_loop_handle_start,  1 },
+    { "handle_close",   como_loop_handle_close,  1 },
+    { "handle_call",    como_loop_handle_call,   1 },
+    { "handle_wrap",    como_loop_handle_wrap,   2 },
+    { "handle_unwrap",  como_loop_handle_unwrap, 1 },
+
+    /* timer functions */
+    { "timer_start", como_loop_timer_start, 3},
+    { "timer_again", como_loop_timer_again, 1},
+    { "update_time", como_loop_update_time, 1},
+
+    /* io functions */
+    { "io_start",  como_loop_io_start,  3 },
+    { "io_stop",   como_loop_io_stop,   2 },
+    { "io_remove",   como_loop_io_remove,   2 },
+    { "io_active", como_loop_io_active, 2 },
+    
+    
     { NULL, NULL, 0 }
 };
 
@@ -219,7 +314,14 @@ static const duk_number_list_entry loop_constants[] = {
     { NULL, 0 }
 };
 
-static const int init_binding_loop(duk_context *ctx) {
+static int init_binding_loop(duk_context *ctx) {
+    
+    /* Initialize global stash 'comoHandles'. */
+    duk_push_global_stash(ctx);
+    duk_push_object(ctx);
+    duk_put_prop_string(ctx, -2, "comoHandles");
+    duk_pop(ctx);
+
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, loop_funcs);
     duk_put_number_list(ctx, -1, loop_constants);

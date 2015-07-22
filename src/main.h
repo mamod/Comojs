@@ -1,13 +1,7 @@
 #ifndef _COMO_CORE_H
 #define _COMO_CORE_H
 
-#include "duktape/duktape.h"
-#include "thread/tinycthread.h"
-
-mtx_t gMainThread;
-
 #include <errno.h>
-
 
 #ifdef _WIN32
     #ifdef __TINYC__
@@ -21,9 +15,22 @@ mtx_t gMainThread;
         #include <ws2tcpip.h>
         #include <assert.h>
     #endif
+    
     #include <windows.h>
+    
     #define dlopen(x,y) (void*)LoadLibrary(x)
     #define dlclose(x) FreeLibrary((HMODULE)x)
+    #define COMO_GET_LAST_ERROR GetLastError()
+
+    static inline int _WSLASTERROR (){
+        int er = WSAGetLastError();
+        if (er == WSAEINVAL){
+            return EINVAL;
+        }
+        return er;
+    }
+    
+    #define COMO_GET_LAST_WSA_ERROR _WSLASTERROR()
 #else
     #include <assert.h>
     #include <unistd.h>
@@ -37,8 +44,17 @@ mtx_t gMainThread;
     #include <arpa/inet.h>
     #include <netdb.h>
     #include <dlfcn.h>
+    #define COMO_GET_LAST_ERROR errno
+
+    /* win32 socket compatible constants */
+    #define SOCKET int
+    #define INVALID_SOCKET -1
+    #define SOCKET_ERROR -1
+    #define COMO_GET_LAST_WSA_ERROR errno
 #endif
 
+#include "duktape/duktape.h"
+#include "thread/tinycthread.h"
 
  void dump_stack(duk_context *ctx, const char *name) {
     duk_idx_t i, n;
@@ -60,6 +76,10 @@ mtx_t gMainThread;
 #endif
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
+#define COMO_METHOD(name) static int (name)(duk_context *ctx)
+#define COMO_METHOD_NAME(name)  name
+
 
 #define COMO_SET_ERRNO(ctx, err) do \
 {\
@@ -84,29 +104,11 @@ mtx_t gMainThread;
     fprintf(stderr, err);      \
     fprintf(stderr, "\n\n");     \
     assert(0); \
-    return DUK_RET_ERROR;      \
 } while(0)
 
 
 void como_run (duk_context *ctx);
-duk_context *como_create_new_heap (int argc, char *argv[]);
-
-typedef struct {
-    char *line;
-    duk_context *ctx;
-    void *self;
-    void* queue[2];
-    mtx_t gMutex;
-} comoChildThread;
-
-typedef struct {
-    int type;
-    void *data;
-    void* queue[2];
-} comoWorkerThread;
-
-comoChildThread *comoGobalThread;
-comoChildThread *como_globa_thread();
+duk_context *como_create_new_heap (int argc, char *argv[], void *error_handle);
 
 void como_sleep (int timeout){
     #ifdef _WIN32
@@ -116,30 +118,20 @@ void como_sleep (int timeout){
     #endif
 }
 
-
-#define _COMO_THREAD_START do \
-{\
-    printf("START\n");\
-    comoChildThread *c =  como_globa_thread();\
-    mtx_lock(&c->gMutex);\
-} while(0)
-
-#define _COMO_THREAD_END do \
-{\
-    printf("END\n");\
-    comoChildThread *c =  como_globa_thread();\
-    mtx_unlock(&c->gMutex);\
-} while(0)
-
 /* BINDINGS */
 #include "bindings/errno.c"
+#include "bindings/loop.c"
+#include "bindings/coro.c"
 #include "bindings/buffer.c"
 #include "bindings/socket.c"
 #include "bindings/io.c"
-#include "bindings/loop.c"
 #include "bindings/http-parser.c"
 #include "bindings/readline.c"
 #include "bindings/worker.c"
+#include "bindings/tty.c"
+#include "bindings/fs.c"
+#include "bindings/crypto.c"
+#include "bindings/tls.c"
 
 #ifdef _WIN32
     #define PLATFORM "win32"
@@ -160,7 +152,5 @@ void como_sleep (int timeout){
 #elif __posix
     // POSIX
 #endif
-
-
 
 #endif /*_COMO_CORE_H*/

@@ -1,2 +1,5 @@
 /ex/
+/plugins/
 *.exe
+*.dll
+*.so

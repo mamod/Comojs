@@ -5,6 +5,7 @@ exports.onmessage = function(e){
 
     //now send a message back to main thread
     e.postMessage("Bye");
+
 }
 
 var i = 0;
@@ -12,9 +13,10 @@ if (process.main){
     print("PARENT > main thread started");
 
     var w = new worker(__filename);
-    w.onmessage = function(e){
+    w.onmessage = function(data){
         print("PARENT > this is main thread again");
-        print("PARENT > some child sent me " + e.data);
+        print("PARENT > some child sent me " + data);
+        w.destroy();
     }
 
     //start the quest

@@ -338,10 +338,7 @@ var gPORT = 9090;
 
     assert.ok(socket.close(connectSock));
     assert.ok(socket.close(s));
-
 })();
-
-
 
 //some ipv6 tests
 (function(){

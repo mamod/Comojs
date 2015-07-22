@@ -1,4 +1,4 @@
-var io = process.binding('io');
+var io = process.binding('tty');
 var readline = require('readline');
 readline.start();
 

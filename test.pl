@@ -4,7 +4,7 @@ use File::Find;
 use File::Spec;
 my $isWin = $^O =~ /win32/i;
 
-my $command = $isWin ? 'como ' : './como.sh ';
+my $command = $isWin ? 'como ' : './como ';
 my @tests;
 my @errors;
 find(sub {

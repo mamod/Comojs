@@ -22,16 +22,24 @@
  * IN THE SOFTWARE.
  */
 #include "http_parser.h"
-#include <assert.h>
+
+
+/* fix for tinycc assert in windows */
+#ifdef _WIN32
+  #ifdef __TINYC__
+    #include "tinycc/assert.h"
+  #else
+    #include <assert.h>
+  #endif
+#else
+ #include <assert.h>
+#endif
+
 #include <stddef.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-
-#ifndef _wassert
-#define _wassert assert
-#endif
 
 #ifndef ULLONG_MAX
 # define ULLONG_MAX ((uint64_t) -1) /* 2^64-1 */

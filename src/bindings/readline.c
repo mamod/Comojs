@@ -8,18 +8,20 @@ typedef struct {
     mtx_t gMutex;
 } comoThreadReadLine;
 
-void _comoReadLine (void *data) {
+static void _comoReadLine (void *data) {
     comoThreadReadLine *c = data;
     
     char buf[1024];
     char *res;
     size_t n = sizeof(buf);
     size_t len;
-    
+
     while (1) {
         if ((res = fgets(buf, n, stdin)) != NULL) {
             mtx_lock(&c->gMutex);
             len = strlen(res);
+            if (len > 0){}
+
             if (res[len-1] == '\n') {
                 res[len-1] = '\0';
                 c->size = len;
@@ -31,16 +33,15 @@ void _comoReadLine (void *data) {
     }
 }
 
-void _ReadLineHandlecb (evHandle *h) {
+static void _ReadLineHandlecb (evHandle *h) {
     comoThreadReadLine *c = h->data;
     if (c->size > 0){
         mtx_lock(&c->gMutex);
         duk_context *ctx = c->ctx;
-        void *self = c->self;
         
         duk_push_heapptr(ctx, c->self);
-        assert(duk_is_object(ctx, 0));
-
+        assert(duk_is_object(ctx, -1));
+        
         duk_get_prop_string(ctx, -1, "online");
         duk_push_heapptr(ctx, c->self);
         duk_push_string(ctx, c->line);
@@ -52,9 +53,26 @@ void _ReadLineHandlecb (evHandle *h) {
     }
 }
 
-static const int _readline_start(duk_context *ctx) {
+// static DWORD orig_consolemode = 0;
+COMO_METHOD(como_readline_start) {
     void *self = duk_require_heapptr(ctx, 0);
     
+    // DWORD n;
+    // INPUT_RECORD irec;
+
+    // HANDLE outh = GetStdHandle(STD_OUTPUT_HANDLE);
+    // HANDLE inh = GetStdHandle(STD_INPUT_HANDLE);
+
+    // if (!PeekConsoleInput(inh, &irec, 1, &n)) {
+    //     return -1;
+    // }
+    // // if (getWindowSize(current) != 0) {
+    // //     return -1;
+    // // }
+    // if (GetConsoleMode(inh, &orig_consolemode)) {
+    //     SetConsoleMode(inh, ENABLE_PROCESSED_INPUT);
+    // }
+
     comoThreadReadLine *c = malloc(sizeof(*c));
     memset(c, 0, sizeof(*c));
     c->ctx = ctx;
@@ -70,7 +88,7 @@ static const int _readline_start(duk_context *ctx) {
     }
     
     //FIXME: set a timer loop to check for new lines
-    evLoop *loop = main_loop();
+    evLoop *loop = como_main_loop(ctx);
     evHandle *h  = handle_init(loop, _ReadLineHandlecb);
     h->data = c;
     timer_start(h, 1, 1);
@@ -80,11 +98,11 @@ static const int _readline_start(duk_context *ctx) {
 }
 
 static const duk_function_list_entry readline_funcs[] = {
-    { "start"      , _readline_start, 1 },
-    { NULL         , NULL, 0 }
+    { "start"        , como_readline_start, 1 },
+    { NULL           , NULL, 0 }
 };
 
-static const int init_binding_readline(duk_context *ctx) {
+static int init_binding_readline(duk_context *ctx) {
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, readline_funcs);
     return 1;

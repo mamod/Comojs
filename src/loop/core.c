@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <limits.h>
 #include <stdint.h>
 #include <sys/time.h>
@@ -9,10 +10,9 @@
 #include "queue.h"
 #include "core.h"
 
-inline void handle_start (evHandle *h);
-inline void handle_stop  (evHandle *h);
-
 #include "select.c"
+
+static int64_t handle_id = 0;
 
 inline void handle_start (evHandle *h){
     if ((h->flags & HANDLE_ACTIVE) != 0) return;
@@ -30,6 +30,18 @@ inline void handle_stop (evHandle *h) {
     }
 }
 
+inline void handle_close (evHandle *h){
+    if ((h->flags & HANDLE_CLOSING) != 0) return;
+    h->flags |= HANDLE_CLOSING;
+    if (h->type == EV_IO){
+        io_close(h);
+    } else if (h->type == EV_TIMER){
+        timer_close(h);
+    } else {
+        assert(0 && "CLOSING UNKNOWN HANDLE\n");
+    }
+}
+
 void handle_ref (evHandle *h) {
     if ((h->flags & HANDLE_REF) != 0) return;
     h->flags |= HANDLE_REF;
@@ -37,6 +49,8 @@ void handle_ref (evHandle *h) {
     if ((h->flags & HANDLE_ACTIVE) != 0) h->loop->active_handles++;
 }
 
+/* if the handle unrefed then it will not run if it's the
+only active handle in the loop so the loop will stop */
 void handle_unref (evHandle *h) {
     if ((h->flags & HANDLE_REF) == 0) return;
     h->flags &= ~HANDLE_REF;
@@ -54,14 +68,15 @@ evHandle *handle_init (evLoop *loop, void *cb) {
     handle->close = NULL;
     handle->data = NULL;
     handle->flags = HANDLE_REF;
+    handle->id = handle_id++;
     return handle;
 }
 
 /* Timers */
-static int timer_less_than(const struct heap_node* ha,
-                           const struct heap_node* hb) {
-    const evTimer* a;
-    const evTimer* b;
+static int timer_less_than(const struct heap_node *ha,
+                           const struct heap_node *hb) {
+    const evTimer *a;
+    const evTimer *b;
     
     a = container_of(ha, const evTimer, heap_node);
     b = container_of(hb, const evTimer, heap_node);
@@ -71,8 +86,9 @@ static int timer_less_than(const struct heap_node* ha,
     if (b->timeout < a->timeout)
         return 0;
     
-    /* Compare start_id when both have the same timeout. start_id is
-     * allocated with loop->timer_counter in uv_timer_start().
+    /*
+    * Compare start_id when both have the same timeout. start_id is
+    * allocated with loop->timer_counter in uv_timer_start().
     */
     if (a->start_id < b->start_id)
         return 1;
@@ -82,8 +98,8 @@ static int timer_less_than(const struct heap_node* ha,
     return 0;
 }
 
-int next_timeout(const evLoop *loop) {
-    const struct heap_node* heap_node;
+static int next_timeout(const evLoop *loop) {
+    const struct heap_node *heap_node;
     const evTimer *handle;
     uint64_t diff;
     
@@ -98,7 +114,7 @@ int next_timeout(const evLoop *loop) {
     return diff;
 }
 
-int timer_start (evHandle* handle,
+int timer_start (evHandle *handle,
                  uint64_t timeout,
                  uint64_t repeat){
     
@@ -112,7 +128,7 @@ int timer_start (evHandle* handle,
     } else {
         timer = handle->ev;
     }
-    //printf("timeout %u\n", timeout);
+
     uint64_t clamped_timeout = handle->loop->time + timeout;
     if (clamped_timeout < timeout) assert(0);
     timer->timeout = clamped_timeout;
@@ -129,7 +145,7 @@ int timer_start (evHandle* handle,
     return 1;
 }
 
-int timer_stop (evHandle* handle) {
+int timer_stop (evHandle *handle) {
     if (!handle || !_is_active(handle)) return 0;
     evTimer *timer = handle->ev;
     heap_remove((struct heap*) &handle->loop->timer_heap,
@@ -140,11 +156,16 @@ int timer_stop (evHandle* handle) {
     return 0;
 }
 
-int timer_close (evHandle* handle) {
+int timer_close (evHandle *handle) {
     handle->flags |= HANDLE_CLOSING;
+    timer_stop(handle);
+    QUEUE_REMOVE(&handle->queue);
+    QUEUE_INSERT_TAIL(&handle->loop->closing_queue, 
+                      &handle->queue);
+    return 0;
 }
 
-int timer_again(evHandle* handle) {
+int timer_again(evHandle *handle) {
     timer_stop(handle);
     if (handle->cb == NULL) return 0;
     evTimer *timer = handle->ev;
@@ -154,10 +175,30 @@ int timer_again(evHandle* handle) {
     return 0;
 }
 
-void run_timers(evLoop* loop) {
-    struct heap_node* heap_node;
-    evTimer* timer;
+int handle_call(evHandle *handle) {
+    if (handle->cb == NULL) return 0;
+    QUEUE_INSERT_TAIL(&handle->loop->handle_queue, 
+                      &handle->queue);
+    return 0;
+}
+
+static void loop_run_immediate(evLoop *loop) {
+    QUEUE *q;
+    evHandle *handle;
+    while ( !QUEUE_EMPTY(&loop->handle_queue) ){
+        q = QUEUE_HEAD(&(loop)->handle_queue);
+        QUEUE_REMOVE(q);
+        handle = QUEUE_DATA(q, evHandle, queue);
+        assert(handle);
+        handle->cb(handle);
+    }
+}
+
+static void loop_run_timers(evLoop *loop) {
+    struct heap_node *heap_node;
+    evTimer *timer;
     for (;;) {
+        loop_run_immediate(loop);
         heap_node = heap_min((struct heap*) &loop->timer_heap);
         if (heap_node == NULL) break;
         
@@ -168,10 +209,17 @@ void run_timers(evLoop* loop) {
         
         timer_again(timer->handle);
         timer->handle->cb(timer->handle);
+        if (!timer->repeat || timer->repeat == 0) {
+            timer_close(timer->handle);
+        }
     }
 }
 
-static double hrtime_interval_ = 0;
+
+#ifdef _WIN32
+    static double hrtime_interval_ = 0;
+#endif
+
 uint64_t loop_hrtime(int scale) {
     #ifdef _WIN32
         LARGE_INTEGER counter;
@@ -205,10 +253,9 @@ uint64_t loop_hrtime(int scale) {
 
 void loop_update_time (evLoop *loop){
     loop->time = loop_hrtime(1000);
-    //printf("timeout %u\n", loop->time);
 }
 
-evLoop *gLoop;
+evLoop *gLoop; /* global loop instance */
 evLoop *loop_init (){
     evLoop *loop = malloc(sizeof(*loop));
     memset(loop, 0, sizeof(*loop));
@@ -218,11 +265,10 @@ evLoop *loop_init (){
     loop->time = 0;
     loop->timer_counter = 0;
     
-    //timer update
+    /* timer update */
     loop_update_time(loop);
     
-    //defined in select or any other
-    //io poll backend
+    /* defined in select.c or any other io poll backend */
     loop_poll_create(loop);
 
     heap_init((struct heap*) &loop->timer_heap);
@@ -241,9 +287,30 @@ evLoop *main_loop () {
     return gLoop;
 }
 
+static void _free_handle(evHandle *handle) {
+    if (handle == NULL) return;
+    free(handle->ev);
+    handle->ev = NULL;
+    free(handle);
+    handle = NULL;
+}
+
 int loop_start (evLoop *loop, int type){
     while (loop->active_handles){
-        
+        /* closing handles */
+        QUEUE *q;
+        evHandle *handle;
+        while ( !QUEUE_EMPTY(&loop->closing_queue) ){
+            q = QUEUE_HEAD(&(loop)->closing_queue);
+            QUEUE_REMOVE(q);
+            handle = QUEUE_DATA(q, evHandle, queue);
+            assert(handle);
+            if (handle->close != NULL){
+                handle->close(handle);
+            } 
+            _free_handle(handle);
+        }
+
         loop_update_time(loop);
         
         int timeout;
@@ -253,7 +320,8 @@ int loop_start (evLoop *loop, int type){
             timeout = next_timeout(loop);
         }
 
-        run_timers(loop);
+        loop_run_timers(loop);
+        loop_run_immediate(loop);
 
         if (QUEUE_EMPTY(&loop->io_queue)) {
             #ifdef _WIN32
@@ -261,33 +329,13 @@ int loop_start (evLoop *loop, int type){
             #else
                 usleep(1000 * timeout);
             #endif
-        }
-        else {
+        } else {
             io_poll(loop, timeout);
-        }
-        
-        /* closing handles */
-        QUEUE *q;
-        evHandle *handle;
-        while ( !QUEUE_EMPTY(&loop->closing_queue) ){
-            q = QUEUE_HEAD(&(loop)->closing_queue);
-            QUEUE_REMOVE(q);
-            handle = QUEUE_DATA(q, evHandle, queue);
-            assert(handle);
-            
-            if (handle->close != NULL){
-                handle->close(handle);
-            }
-
-            free(handle->ev);
-            free(handle->data);
-            free(handle);
         }
 
         /* run once */
-        if (type == 1){
-            break;
-        }
+        if (type == 1){ break; }
     }
-    return 0;
+
+    return loop->active_handles > 0;
 }

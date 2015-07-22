@@ -33,8 +33,15 @@ static const int _call_me(duk_context *ctx) {
     return 1;
 }
 
+static const int _print_fast(duk_context *ctx) {
+    const char *str = duk_get_string(ctx, 0);
+    printf("%s\n", str);
+    return 1;
+}
+
 static const duk_function_list_entry my_funcs[] = {
     { "call_me", _call_me, 0 },
+    {"printFast", _print_fast, 1 },
     { "call_again", _my_own_call, 0 },
     { NULL, NULL, 0 }
 };

@@ -1,1 +1,0 @@
-tcc "./src/loop/core.c" "-run -I./include -I/media/sf_shared/tcc/include" tests/loop.c

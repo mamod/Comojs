@@ -1,5 +1,5 @@
-#ifndef _EV_FDSET_H
-#define _EV_FDSET_H
+#ifndef _EV_CORE_H
+#define _EV_CORE_H
 
 #if !defined( IO_FD_SETSIZE )
     #define IO_FD_SETSIZE 1024
@@ -14,7 +14,6 @@
         #define FD_SETSIZE IO_FD_SETSIZE
     #endif
 #endif
-#endif /* _EV_FDSET_H */
 
 #include <stdlib.h>
 
@@ -55,7 +54,7 @@
   Loop stuct 
  ============================================================================*/
 typedef struct {
-    void* data;
+    void *data;
     unsigned int active_handles;
     void *handle_queue[2];
     void *closing_queue[2];
@@ -81,6 +80,7 @@ typedef struct evHandle {
     void *queue[2];
     int flags;
     int type;
+    int64_t id;
     evLoop *loop;
 } evHandle;
 
@@ -96,7 +96,7 @@ typedef struct {
 } evTimer;
 
 /*=============================================================================
-  IO stuct 
+  IO struct 
  ============================================================================*/
 typedef struct {
     evHandle *handle;
@@ -106,7 +106,7 @@ typedef struct {
 } evIO;
 
 /*=============================================================================
-  IO stuct 
+  nextEvent struct 
 ============================================================================*/
 typedef struct {
     evHandle *handle;
@@ -128,12 +128,21 @@ int io_remove (evHandle* handle, int mask);
 int io_add (evHandle* handle, int mask);
 int io_start (evHandle* handle, int fd, int mask);
 int io_stop (evHandle* handle, int mask);
+int io_close (evHandle* handle);
 int io_active (evHandle* handle, int mask);
 
 void loop_update_time (evLoop *loop);
 int loop_start (evLoop *loop, int type);
 int loop_close (evHandle *handle, void *cb);
 
+int handle_call(evHandle *handle);
+
+inline void handle_start (evHandle *h);
+inline void handle_stop  (evHandle *h);
+inline void handle_close (evHandle *h);
+
 evLoop *loop_init ();
 evLoop *main_loop ();
 evHandle *handle_init (evLoop *loop, void *cb);
+
+#endif /* _EV_CORE_H */

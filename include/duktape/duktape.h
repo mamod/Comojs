@@ -1,11 +1,11 @@
 /*
- *  Duktape public API for Duktape 1.0.0.
+ *  Duktape public API for Duktape 1.2.2.
  *  See the API reference for documentation on call semantics.
  *  The exposed API is inside the DUK_API_PUBLIC_H_INCLUDED
  *  include guard.  Other parts of the header are Duktape
  *  internal and related to platform/compiler/feature detection.
  *
- *  Git commit c57f64afdc374dc3444f8447bac4f7680a2f5b0b (v1.0.0).
+ *  Git commit 5f4302c732d21b3b721db3d3473db32e4eb92470 (v1.2.2).
  *
  *  See Duktape AUTHORS.rst and LICENSE.txt for copyright and
  *  licensing information.
@@ -19,7 +19,7 @@
  *  
  *  (http://opensource.org/licenses/MIT)
  *  
- *  Copyright (c) 2013-2014 by Duktape authors (see AUTHORS.rst)
+ *  Copyright (c) 2013-2015 by Duktape authors (see AUTHORS.rst)
  *  
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -66,12 +66,14 @@
  *  * Sami Vaarala <sami.vaarala@iki.fi>
  *  * Niki Dobrev
  *  * Andreas \u00d6man <andreas@lonelycoder.com>
+ *  * L\u00e1szl\u00f3 Lang\u00f3 <llango.u-szeged@partner.samsung.com>
+ *  * Legimet <legimet.calc@gmail.com>
  *  
  *  Other contributions
  *  ===================
  *  
  *  The following people have contributed something other than code (e.g. reported
- *  bugs, provided ideas, etc; in order of appearance):
+ *  bugs, provided ideas, etc; roughly in order of appearance):
  *  
  *  * Greg Burns
  *  * Anthony Rabine
@@ -87,8 +89,21 @@
  *  * Rajaran Gaunker (https://github.com/zimbabao)
  *  * Andreas \u00d6man
  *  * Doug Sanden
+ *  * Josh Engebretson (https://github.com/JoshEngebretson)
  *  * Remo Eichenberger (https://github.com/remoe)
- *  * David Demelier
+ *  * Mamod Mehyar (https://github.com/mamod)
+ *  * David Demelier (https://github.com/hftmarkand)
+ *  * Tim Caswell (https://github.com/creationix)
+ *  * Mitchell Blank Jr (https://github.com/mitchblank)
+ *  * https://github.com/yushli
+ *  * Seo Sanghyeon (https://github.com/sanxiyn)
+ *  * Han ChoongWoo (https://github.com/tunz)
+ *  * Joshua Peek (https://github.com/josh)
+ *  * Bruce E. Pascoe (https://github.com/fatcerberus)
+ *  * https://github.com/Kelledin
+ *  
+ *  If you are accidentally missing from this list, send me an e-mail
+ *  (``sami.vaarala@iki.fi``) and I'll fix the omission.
  */
 
 #ifndef DUKTAPE_H_INCLUDED
@@ -233,13 +248,29 @@ static __inline__ unsigned long long duk_rdtsc(void) {
 #endif
 
 /* MIPS */
-/* XXX: 32-bit vs. 64-bit MIPS */
+/* Related defines: __MIPSEB__, __MIPSEL__, __mips_isa_rev, __LP64__ */
 #if defined(__mips__) || defined(mips) || defined(_MIPS_ISA) || \
     defined(_R3000) || defined(_R4000) || defined(_R5900) || \
     defined(_MIPS_ISA_MIPS1) || defined(_MIPS_ISA_MIPS2) || \
     defined(_MIPS_ISA_MIPS3) || defined(_MIPS_ISA_MIPS4) || \
     defined(__mips) || defined(__MIPS__)
 #define DUK_F_MIPS
+#if defined(__LP64__) || defined(__mips64) || defined(__mips64__) || \
+    defined(__mips_n64)
+#define DUK_F_MIPS64
+#else
+#define DUK_F_MIPS32
+#endif
+#endif
+
+/* SuperH */
+#if defined(__sh__) || \
+    defined(__sh1__) || defined(__SH1__) || \
+    defined(__sh2__) || defined(__SH2__) || \
+    defined(__sh3__) || defined(__SH3__) || \
+    defined(__sh4__) || defined(__SH4__) || \
+    defined(__sh5__) || defined(__SH5__)
+#define DUK_F_SUPERH
 #endif
 
 /* Motorola 68K.  Not defined by VBCC, so user must define one of these
@@ -292,6 +323,10 @@ static __inline__ unsigned long long duk_rdtsc(void) {
 #define DUK_F_WINDOWS
 #endif
 
+#if defined(__APPLE__)
+#define DUK_F_APPLE
+#endif
+
 /* Atari ST TOS. __TOS__ defined by PureC (which doesn't work as a target now
  * because int is 16-bit, to be fixed).  No platform define in VBCC apparently,
  * so to use with VBCC, user must define '__TOS__' manually.
@@ -320,6 +355,11 @@ static __inline__ unsigned long long duk_rdtsc(void) {
 /* QNX */
 #if defined(__QNX__)
 #define DUK_F_QNX
+#endif
+
+/* TI-Nspire (using Ndless) */
+#if defined(_TINSPIRE)
+#define DUK_F_TINSPIRE
 #endif
 
 /* GCC and GCC version convenience define. */
@@ -363,6 +403,7 @@ static __inline__ unsigned long long duk_rdtsc(void) {
 
 /* MinGW */
 #if defined(__MINGW32__) || defined(__MINGW64__)
+/* NOTE: Also GCC flags are detected (DUK_F_GCC etc). */
 #define DUK_F_MINGW
 #endif
 
@@ -471,12 +512,23 @@ static __inline__ unsigned long long duk_rdtsc(void) {
 #define DUK_F_NO_STDINT_H
 #endif
 
+/* Workaround for older C++ compilers before including <inttypes.h>,
+ * see e.g.: https://sourceware.org/bugzilla/show_bug.cgi?id=15366
+ */
+#if defined(__cplusplus) && !defined(__STDC_LIMIT_MACROS)
+#define __STDC_LIMIT_MACROS
+#endif
+#if defined(__cplusplus) && !defined(__STDC_CONSTANT_MACROS)
+#define __STDC_CONSTANT_MACROS
+#endif
+
 #if defined(__APPLE__)
 /* Mac OSX, iPhone, Darwin */
 #define DUK_USE_DATE_NOW_GETTIMEOFDAY
 #define DUK_USE_DATE_TZO_GMTIME_R
 #define DUK_USE_DATE_PRS_STRPTIME
 #define DUK_USE_DATE_FMT_STRFTIME
+#include <TargetConditionals.h>
 #include <architecture/byte_order.h>
 #include <limits.h>
 #include <sys/param.h>
@@ -558,6 +610,16 @@ static __inline__ unsigned long long duk_rdtsc(void) {
 #include <sys/param.h>
 #include <sys/time.h>
 #include <time.h>
+#elif defined(DUK_F_TINSPIRE)
+#define DUK_USE_DATE_NOW_GETTIMEOFDAY
+#define DUK_USE_DATE_TZO_GMTIME_R
+#define DUK_USE_DATE_PRS_STRPTIME
+#define DUK_USE_DATE_FMT_STRFTIME
+#include <sys/types.h>
+#include <limits.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <time.h>
 #elif defined(DUK_F_LINUX)
 #define DUK_USE_DATE_NOW_GETTIMEOFDAY
 #define DUK_USE_DATE_TZO_GMTIME_R
@@ -624,7 +686,9 @@ static __inline__ unsigned long long duk_rdtsc(void) {
 #if defined(DUK_F_NO_STDINT_H)
 /* stdint.h not available */
 #else
-/* technically C99 (C++11) but found in many systems */
+/* Technically C99 (C++11) but found in many systems.  Note the workaround
+ * above for some C++ compilers (__STDC_LIMIT_MACROS etc).
+ */
 #include <stdint.h>
 #endif
 #include <math.h>
@@ -710,7 +774,8 @@ static __inline__ unsigned long long duk_rdtsc(void) {
  * through automatic detection.
  */
 #if defined(DUK_F_HAVE_INTTYPES)
-/* C99 */
+/* C99 or compatible */
+
 #define DUK_F_HAVE_64BIT
 #include <inttypes.h>
 
@@ -897,7 +962,7 @@ typedef signed long long duk_int64_t;
 typedef unsigned long duk_uint64_t;
 typedef signed long duk_int64_t;
 #endif
-#if !defined(DUK_F_HAVE64BIT)
+#if !defined(DUK_F_HAVE_64BIT)
 /* cannot detect 64-bit type, not always needed so don't error */
 #endif
 
@@ -1162,10 +1227,11 @@ typedef double duk_double_t;
 #error DUK_SIZE_MAX is undefined, probably missing SIZE_MAX
 #elif !defined(DUK_SIZE_MAX_COMPUTED)
 #if DUK_SIZE_MAX < 0xffffffffUL
-/* XXX: compare against a lower value; can SIZE_MAX realistically be
- * e.g. 0x7fffffffUL on a 32-bit system?
+/* On some systems SIZE_MAX can be smaller than max unsigned 32-bit value
+ * which seems incorrect if size_t is (at least) an unsigned 32-bit type.
+ * However, it doesn't seem useful to error out compilation if this is the
+ * case.
  */
-#error size_t is too small
 #endif
 #endif
 
@@ -1214,13 +1280,30 @@ typedef double duk_double_t;
 #define DUK_USE_ALIGN_8
 #elif defined(DUK_F_ARM)
 #define DUK_USE_ALIGN_4
-#elif defined(DUK_F_MIPS)
+#elif defined(DUK_F_MIPS32)
+/* Based on 'make checkalign' there are no alignment requirements on
+ * Linux MIPS except for doubles, which need align by 4.  Alignment
+ * requirements vary based on target though.
+ */
+#define DUK_USE_ALIGN_4
+#elif defined(DUK_F_MIPS64)
+/* Good default is a bit arbitrary because alignment requirements
+ * depend on target.  See https://github.com/svaarala/duktape/issues/102.
+ */
+#define DUK_USE_ALIGN_8
+#elif defined(DUK_F_SUPERH)
+/* Based on 'make checkalign' there are no alignment requirements on
+ * Linux SH4, but align by 4 is probably a good basic default.
+ */
 #define DUK_USE_ALIGN_4
 #elif defined(DUK_F_X86) || defined(DUK_F_X32) || defined(DUK_F_X64) || \
       defined(DUK_F_BCC)
+/* XXX: This is technically not guaranteed because it's possible to configure
+ * an x86 to require aligned accesses with Alignment Check (AC) flag.
+ */
 #define DUK_USE_UNALIGNED_ACCESSES_POSSIBLE
 #else
-/* unknown, use safe default */
+/* Unknown, use safe default */
 #define DUK_USE_ALIGN_8
 #endif
 
@@ -1871,8 +1954,6 @@ typedef FILE duk_file;
 
 #define DUK_ABORT        abort
 #define DUK_EXIT         exit
-#define DUK_SETJMP       setjmp
-#define DUK_LONGJMP      longjmp
 
 /*
  *  Macro hackery to convert e.g. __LINE__ to a string without formatting,
@@ -1891,7 +1972,7 @@ typedef FILE duk_file;
  */
 
 #define DUK_CAUSE_SEGFAULT()  do { \
-		*((duk_uint32_t *) NULL) = (duk_uint32_t) 0xdeadbeefUL; \
+		*((volatile duk_uint32_t *) NULL) = (duk_uint32_t) 0xdeadbeefUL; \
 	} while (0)
 
 /*
@@ -1992,7 +2073,7 @@ typedef FILE duk_file;
 #endif
 
 #if defined(DUK_USE_BRANCH_HINTS)
-#if defined(DUK_F_GCC_VERSION) && (DUK_F_GCC_VERISON >= 40500L)
+#if defined(DUK_F_GCC_VERSION) && (DUK_F_GCC_VERSION >= 40500L)
 /* GCC: test not very accurate; enable only in relatively recent builds
  * because of bugs in gcc-4.4 (http://lists.debian.org/debian-gcc/2010/04/msg00000.html)
  */
@@ -2012,15 +2093,54 @@ typedef FILE duk_file;
 #endif
 
 /*
+ *  Function inlining control
+ *
+ *  DUK_NOINLINE: avoid inlining a function.
+ *  DUK_INLINE: suggest inlining a function.
+ *  DUK_ALWAYS_INLINE: force inlining for critical functions.
+ */
+
+#if defined(DUK_F_CLANG)
+#define DUK_NOINLINE        __attribute__((noinline))
+#define DUK_INLINE          inline
+#define DUK_ALWAYS_INLINE   inline __attribute__((always_inline))
+#elif defined(DUK_F_GCC) && defined(DUK_F_GCC_VERSION)
+#if (DUK_F_GCC_VERSION >= 30101)
+#define DUK_NOINLINE        __attribute__((noinline))
+#define DUK_INLINE          inline
+#define DUK_ALWAYS_INLINE   inline __attribute__((always_inline))
+#endif
+#endif
+
+#if !defined(DUK_NOINLINE)
+#define DUK_NOINLINE       /*nop*/
+#define DUK_INLINE         /*nop*/
+#define DUK_ALWAYS_INLINE  /*nop*/
+#endif
+
+/*
  *  Symbol visibility macros
+ *
+ *  To avoid C++ declaration issues (see GH-63):
+ *
+ *    - Don't use DUK_LOCAL_DECL for local -data symbols- so that you don't
+ *      end up with both a "static" declaration and a definition.
+ *
+ *    - Wrap any DUK_INTERNAL_DECL with a '#if !defined(DUK_SINGLE_FILE)'
+ *      so that the internal declarations (which would map to "static" in
+ *      a single file distribution) get dropped.
  */
 
 /* XXX: user override for these? user override for just using the default visibility macros? */
 /* XXX: separate macros for function and data may be necessary at some point. */
 
 #if defined(DUK_F_GCC_VERSION)
-#if (DUK_F_GCC_VERSION >= 40000)
-/* Might work on earlier versions too but limit to GCC 4+. */
+#if (DUK_F_GCC_VERSION >= 40000) && !(defined(DUK_F_MINGW) || defined(DUK_F_CYGWIN))
+/* Might work on earlier versions too but limit to GCC 4+.
+ * MinGW should use Windows specific __declspec or no visibility attributes at all,
+ * otherwise: "warning: visibility attribute not supported in this configuration; ignored".
+ * Same applies to Cygwin GCC.
+ */
 #define DUK_F_GCC_SYMBOL_VISIBILITY
 #endif
 #endif
@@ -2098,6 +2218,23 @@ typedef FILE duk_file;
 #endif
 
 /*
+ *  Byteswap macros
+ *
+ *  These are here so that inline assembly or other platform functions can be
+ *  used if available.
+ */
+
+#define DUK_BSWAP32(x) \
+	((((duk_uint32_t) (x)) >> 24) | \
+	 ((((duk_uint32_t) (x)) >> 8) & 0xff00UL) | \
+	 ((((duk_uint32_t) (x)) << 8) & 0xff0000UL) | \
+	 (((duk_uint32_t) (x)) << 24))
+
+#define DUK_BSWAP16(x) \
+	((duk_uint16_t) (x) >> 8) | \
+	((duk_uint16_t) (x) << 8)
+
+/*
  *  Architecture string, human readable value exposed in Duktape.env
  */
 
@@ -2109,8 +2246,12 @@ typedef FILE duk_file;
 #define DUK_USE_ARCH_STRING "x64"
 #elif defined(DUK_F_ARM)
 #define DUK_USE_ARCH_STRING "arm"
-#elif defined(DUK_F_MIPS)
-#define DUK_USE_ARCH_STRING "mips"
+#elif defined(DUK_F_MIPS32)
+#define DUK_USE_ARCH_STRING "mips32"
+#elif defined(DUK_F_MIPS64)
+#define DUK_USE_ARCH_STRING "mips64"
+#elif defined(DUK_F_SUPERH)
+#define DUK_USE_ARCH_STRING "sh"
 #elif defined(DUK_F_M68K)
 #define DUK_USE_ARCH_STRING "m68k"
 #elif defined(DUK_F_FLASHPLAYER)
@@ -2127,6 +2268,17 @@ typedef FILE duk_file;
 
 #if defined(DUK_F_LINUX)
 #define DUK_USE_OS_STRING "linux"
+#elif defined(__APPLE__)
+/* http://stackoverflow.com/questions/5919996/how-to-detect-reliably-mac-os-x-ios-linux-windows-in-c-preprocessor */
+#if TARGET_IPHONE_SIMULATOR
+#define DUK_USE_OS_STRING "iphone-sim"
+#elif TARGET_OS_IPHONE
+#define DUK_USE_OS_STRING "iphone"
+#elif TARGET_OS_MAC
+#define DUK_USE_OS_STRING "ios"
+#else
+#define DUK_USE_OS_STRING "ios-unknown"
+#endif
 #elif defined(DUK_F_FREEBSD)
 #define DUK_USE_OS_STRING "freebsd"
 #elif defined(DUK_F_OPENBSD)
@@ -2145,6 +2297,8 @@ typedef FILE duk_file;
 #define DUK_USE_OS_STRING "amigaos"
 #elif defined(DUK_F_QNX)
 #define DUK_USE_OS_STRING "qnx"
+#elif defined(DUK_F_TINSPIRE)
+#define DUK_USE_OS_STRING "tinspire"
 #else
 #define DUK_USE_OS_STRING "unknown"
 #endif
@@ -2153,14 +2307,18 @@ typedef FILE duk_file;
  *  Compiler string, human readable value exposed in Duktape.env
  */
 
-#if defined(DUK_F_GCC)
+#if defined(DUK_F_MINGW)
+#define DUK_USE_COMPILER_STRING "mingw"
+#elif defined(DUK_F_GCC)
+#if defined(DUK_F_CPP)
+#define DUK_USE_COMPILER_STRING "g++"
+#else
 #define DUK_USE_COMPILER_STRING "gcc"
+#endif
 #elif defined(DUK_F_CLANG)
 #define DUK_USE_COMPILER_STRING "clang"
 #elif defined(DUK_F_MSVC)
 #define DUK_USE_COMPILER_STRING "msvc"
-#elif defined(DUK_F_MINGW)
-#define DUK_USE_COMPILER_STRING "mingw"
 #elif defined(DUK_F_VBCC)
 #define DUK_USE_COMPILER_STRING "vbcc"
 #else
@@ -2168,15 +2326,91 @@ typedef FILE duk_file;
 #endif
 
 /*
+ *  Long control transfer, setjmp/longjmp or alternatives
+ *
+ *  Signal mask is not saved (when that can be communicated to the platform)
+ */
+
+/* dummy non-zero value to be used as an argument for longjmp(), see man longjmp */
+#define DUK_LONGJMP_DUMMY_VALUE  1
+
+#if defined(DUK_OPT_SETJMP)
+#define DUK_USE_SETJMP
+#elif defined(DUK_OPT_UNDERSCORE_SETJMP)
+#define DUK_USE_UNDERSCORE_SETJMP
+#elif defined(DUK_OPT_SIGSETJMP)
+#define DUK_USE_SIGSETJMP
+#elif defined(__APPLE__)
+/* Use _setjmp() on Apple by default, see GH-55. */
+#define DUK_USE_UNDERSCORE_SETJMP
+#else
+/* The most portable default is setjmp(). */
+#define DUK_USE_SETJMP
+#endif
+
+#if defined(DUK_USE_UNDERSCORE_SETJMP)
+#define DUK_SETJMP(jb)        _setjmp((jb))
+#define DUK_LONGJMP(jb)       _longjmp((jb), DUK_LONGJMP_DUMMY_VALUE)
+#elif defined(DUK_USE_SIGSETJMP)
+#define DUK_SETJMP(jb)        sigsetjmp((jb), 0 /*savesigs*/)
+#define DUK_LONGJMP(jb)       siglongjmp((jb), DUK_LONGJMP_DUMMY_VALUE)
+#elif defined(DUK_USE_SETJMP)
+#define DUK_SETJMP(jb)        setjmp((jb))
+#define DUK_LONGJMP(jb)       longjmp((jb), DUK_LONGJMP_DUMMY_VALUE)
+#else
+#error internal error
+#endif
+
+/*
+ *  Target info string
+ */
+
+#if defined(DUK_OPT_TARGET_INFO)
+#define DUK_USE_TARGET_INFO DUK_OPT_TARGET_INFO
+#else
+#define DUK_USE_TARGET_INFO "unknown"
+#endif
+
+/*
+ *  Speed/size and other performance options
+ */
+
+/* Use fast ("inline") refcount operations instead of calling out to helpers
+ * by default.  The difference in binary size is small (~1kB on x64).
+ */
+#define DUK_USE_FAST_REFCOUNT_DEFAULT
+
+/* Assert for valstack space but don't check for it in non-assert build.
+ * Valstack overruns (writing beyond checked space) is memory unsafe and
+ * potentially a segfault.  Produces a smaller and faster binary.
+ * (In practice the speed difference is small with -O3 so default to
+ * safer behavior for now.)
+ */
+#undef DUK_USE_VALSTACK_UNSAFE
+
+/* Catch-all flag which can be used to choose between variant algorithms
+ * where a speed-size tradeoff exists (e.g. lookup tables).  When it really
+ * matters, specific use flags may be appropriate.
+ */
+#define DUK_USE_PREFER_SIZE
+
+/*
  *  Tagged type representation (duk_tval)
  */
 
 #undef DUK_USE_PACKED_TVAL
-#undef DUK_USE_FULL_TVAL
 
 #if defined(DUK_USE_PACKED_TVAL_POSSIBLE) && !defined(DUK_OPT_NO_PACKED_TVAL)
 #define DUK_USE_PACKED_TVAL
-#undef DUK_USE_FULL_TVAL
+#endif
+
+/* Support for 48-bit signed integer duk_tval with transparent semantics. */
+#undef DUK_USE_FASTINT
+#if defined(DUK_OPT_FASTINT)
+#if !defined(DUK_F_HAVE_64BIT)
+#error DUK_OPT_FASTINT requires 64-bit integer type support at the moment
+#endif
+#define DUK_USE_FASTINT
 #endif
 
 /*
@@ -2187,7 +2421,6 @@ typedef FILE duk_file;
 #define DUK_USE_DOUBLE_LINKED_HEAP
 #define DUK_USE_MARK_AND_SWEEP
 #define DUK_USE_MS_STRINGTABLE_RESIZE
-#undef DUK_USE_GC_TORTURE
 
 #if defined(DUK_OPT_NO_REFERENCE_COUNTING)
 #undef DUK_USE_REFERENCE_COUNTING
@@ -2216,8 +2449,22 @@ typedef FILE duk_file;
 #undef DUK_USE_MS_STRINGTABLE_RESIZE
 #endif
 
+#undef DUK_USE_GC_TORTURE
 #if defined(DUK_OPT_GC_TORTURE)
 #define DUK_USE_GC_TORTURE
+#endif
+
+/*
+ *  String table options
+ */
+
+#if defined(DUK_OPT_STRTAB_CHAIN) && defined(DUK_OPT_STRTAB_CHAIN_SIZE)
+/* Low memory algorithm: separate chaining using arrays, fixed size hash */
+#define DUK_USE_STRTAB_CHAIN
+#define DUK_USE_STRTAB_CHAIN_SIZE  DUK_OPT_STRTAB_CHAIN_SIZE
+#else
+/* Default algorithm: open addressing (probing) */
+#define DUK_USE_STRTAB_PROBE
 #endif
 
 /*
@@ -2261,15 +2508,44 @@ typedef FILE duk_file;
  *  Execution and debugger options
  */
 
-/* Executor interrupt disabled for 1.0 release: there is no API to use it */
-#if 0
-#define DUK_USE_INTERRUPT_COUNTER
-#if defined(DUK_OPT_NO_INTERRUPT_COUNTER)
 #undef DUK_USE_INTERRUPT_COUNTER
-#endif
+#if defined(DUK_OPT_INTERRUPT_COUNTER)
+#define DUK_USE_INTERRUPT_COUNTER
 #endif
 
-#undef DUK_USE_INTERRUPT_COUNTER
+#undef DUK_USE_EXEC_TIMEOUT_CHECK
+#if defined(DUK_OPT_EXEC_TIMEOUT_CHECK)
+#define DUK_USE_EXEC_TIMEOUT_CHECK(udata)  DUK_OPT_EXEC_TIMEOUT_CHECK((udata))
+#endif
+
+#undef DUK_USE_DEBUGGER_SUPPORT
+#if defined(DUK_OPT_DEBUGGER_SUPPORT)
+#define DUK_USE_DEBUGGER_SUPPORT
+#endif
+
+#undef DUK_USE_DEBUGGER_FWD_PRINTALERT
+#if defined(DUK_OPT_DEBUGGER_SUPPORT) && defined(DUK_OPT_DEBUGGER_FWD_PRINTALERT)
+#define DUK_USE_DEBUGGER_FWD_PRINTALERT
+#endif
+
+#undef DUK_USE_DEBUGGER_FWD_LOGGING
+#if defined(DUK_OPT_DEBUGGER_SUPPORT) && defined(DUK_OPT_DEBUGGER_FWD_LOGGING)
+#define DUK_USE_DEBUGGER_FWD_LOGGING
+#endif
+
+/* DumpHeap is optional because it's not always needed and has a relatively
+ * large footprint.
+ */
+#undef DUK_USE_DEBUGGER_DUMPHEAP
+#if defined(DUK_OPT_DEBUGGER_DUMPHEAP)
+#define DUK_USE_DEBUGGER_DUMPHEAP
+#endif
+
+/* Debugger transport read/write torture. */
+#undef DUK_USE_DEBUGGER_TRANSPORT_TORTURE
+#if defined(DUK_OPT_DEBUGGER_TRANSPORT_TORTURE)
+#define DUK_USE_DEBUGGER_TRANSPORT_TORTURE
+#endif
 
 /* For opcodes with indirect indices, check final index against stack size.
  * This should not be necessary because the compiler is trusted, and we don't
@@ -2343,6 +2619,11 @@ typedef FILE duk_file;
 /* Math built-in is stubbed out on BCC to allow compiler torture testing. */
 #else
 #define DUK_USE_MATH_BUILTIN
+#endif
+
+#define DUK_USE_STRICT_DECL
+#if defined(DUK_OPT_NO_STRICT_DECL)
+#undef DUK_USE_STRICT_DECL
 #endif
 
 #define DUK_USE_REGEXP_SUPPORT
@@ -2471,6 +2752,29 @@ typedef FILE duk_file;
 #undef DUK_USE_NONSTD_SETTER_KEY_ARGUMENT
 #endif
 
+/* JSON escaping of U+2028 and U+2029.
+ */
+
+#define DUK_USE_NONSTD_JSON_ESC_U2028_U2029
+#if defined(DUK_OPT_NO_NONSTD_JSON_ESC_U2028_U2029)
+#undef DUK_USE_NONSTD_JSON_ESC_U2028_U2029
+#endif
+
+/* Allow 32-bit codepoints in String.fromCharCode. */
+#define DUK_USE_NONSTD_STRING_FROMCHARCODE_32BIT
+#if defined(DUK_OPT_NO_NONSTD_STRING_FROMCHARCODE_32BIT)
+#undef DUK_USE_NONSTD_STRING_FROMCHARCODE_32BIT
+#endif
+
+/* Non-standard array fast path write behavior: when writing to numeric
+ * indexes of an Array instance, assume Array.prototype doesn't have
+ * conflicting properties (e.g. a non-writable property "7").
+ */
+#define DUK_USE_NONSTD_ARRAY_WRITE
+#if defined(DUK_OPT_NO_NONSTD_ARRAY_WRITE)
+#undef DUK_USE_NONSTD_ARRAY_WRITE
+#endif
+
 /*
  *  Tailcalls
  */
@@ -2511,6 +2815,11 @@ typedef FILE duk_file;
 #define DUK_USE_ESBC_LIMITS
 #define DUK_USE_ESBC_MAX_LINENUMBER  0x7fff0000L
 #define DUK_USE_ESBC_MAX_BYTES       0x7fff0000L
+
+#undef DUK_USE_SHUFFLE_TORTURE
+#if defined(DUK_OPT_SHUFFLE_TORTURE)
+#define DUK_USE_SHUFFLE_TORTURE
+#endif
 
 /*
  *  User panic handler, panic exit behavior for default panic handler
@@ -2587,6 +2896,105 @@ typedef FILE duk_file;
 #undef DUK_USE_USER_INITJS
 #if defined(DUK_OPT_USER_INITJS)
 #define DUK_USE_USER_INITJS (DUK_OPT_USER_INITJS)
+#endif
+
+/*
+ *  External string data support
+ *
+ *  Allow duk_hstrings to store data also behind an external pointer (see
+ *  duk_hstring_external).  This increases code size slightly but is useful
+ *  in low memory environments where memory is more limited than flash.
+ */
+
+#undef DUK_USE_HSTRING_EXTDATA
+#if defined(DUK_OPT_EXTERNAL_STRINGS)
+#define DUK_USE_HSTRING_EXTDATA
+#endif
+
+#undef DUK_USE_EXTSTR_INTERN_CHECK
+#if defined(DUK_OPT_EXTERNAL_STRINGS) && defined(DUK_OPT_EXTSTR_INTERN_CHECK)
+#define DUK_USE_EXTSTR_INTERN_CHECK(udata,ptr,len) DUK_OPT_EXTSTR_INTERN_CHECK((udata), (ptr), (len))
+#endif
+
+#undef DUK_USE_EXTSTR_FREE
+#if defined(DUK_OPT_EXTERNAL_STRINGS) && defined(DUK_OPT_EXTSTR_FREE)
+#define DUK_USE_EXTSTR_FREE(udata,ptr) DUK_OPT_EXTSTR_FREE((udata), (ptr))
+#endif
+
+/*
+ *  Lightweight functions
+ */
+
+/* Force built-ins to use lightfunc function pointers when possible.  This
+ * makes the built-in functions non-compliant with respect to their property
+ * values and such, but is very useful in low memory environments (can save
+ * around 14kB of initial RAM footprint).
+ */
+#undef DUK_USE_LIGHTFUNC_BUILTINS
+#if defined(DUK_OPT_LIGHTFUNC_BUILTINS)
+#define DUK_USE_LIGHTFUNC_BUILTINS
+#endif
+
+/*
+ *  Pointer compression and 16-bit header fields for low memory environments
+ */
+
+#undef DUK_USE_HEAPPTR16
+#undef DUK_USE_HEAPPTR_ENC16
+#undef DUK_USE_HEAPPTR_DEC16
+#if defined(DUK_OPT_HEAPPTR16) && defined(DUK_OPT_HEAPPTR_ENC16) && defined(DUK_OPT_HEAPPTR_DEC16)
+#define DUK_USE_HEAPPTR16
+#define DUK_USE_HEAPPTR_ENC16(udata,ptr) DUK_OPT_HEAPPTR_ENC16((udata),(ptr))
+#define DUK_USE_HEAPPTR_DEC16(udata,ptr) DUK_OPT_HEAPPTR_DEC16((udata),(ptr))
+#endif
+
+#undef DUK_USE_DATAPTR16
+#undef DUK_USE_DATAPTR_ENC16
+#undef DUK_USE_DATAPTR_DEC16
+#if defined(DUK_OPT_DATAPTR16) && defined(DUK_OPT_DATAPTR_ENC16) && defined(DUK_OPT_DATAPTR_DEC16)
+#define DUK_USE_DATAPTR16
+#define DUK_USE_DATAPTR_ENC16(udata,ptr) DUK_OPT_DATAPTR_ENC16((udata),(ptr))
+#define DUK_USE_DATAPTR_DEC16(udata,ptr) DUK_OPT_DATAPTR_DEC16((udata),(ptr))
+#endif
+
+#undef DUK_USE_FUNCPTR16
+#undef DUK_USE_FUNCPTR_ENC16
+#undef DUK_USE_FUNCPTR_DEC16
+#if defined(DUK_OPT_FUNCPTR16) && defined(DUK_OPT_FUNCPTR_ENC16) && defined(DUK_OPT_FUNCPTR_DEC16)
+#define DUK_USE_FUNCPTR16
+#define DUK_USE_FUNCPTR_ENC16(udata,ptr) DUK_OPT_FUNCPTR_ENC16((udata),(ptr))
+#define DUK_USE_FUNCPTR_DEC16(udata,ptr) DUK_OPT_FUNCPTR_DEC16((udata),(ptr))
+#endif
+
+#undef DUK_USE_REFCOUNT16
+#if defined(DUK_OPT_REFCOUNT16)
+#define DUK_USE_REFCOUNT16
+#endif
+
+#undef DUK_USE_STRHASH16
+#if defined(DUK_OPT_STRHASH16)
+#define DUK_USE_STRHASH16
+#endif
+
+#undef DUK_USE_STRLEN16
+#if defined(DUK_OPT_STRLEN16)
+#define DUK_USE_STRLEN16
+#endif
+
+#undef DUK_USE_BUFLEN16
+#if defined(DUK_OPT_BUFLEN16)
+#define DUK_USE_BUFLEN16
+#endif
+
+#undef DUK_USE_OBJSIZES16
+#if defined(DUK_OPT_OBJSIZES16)
+#define DUK_USE_OBJSIZES16
+#endif
+
+/* For now, hash part is dropped if and only if 16-bit object fields are used. */
+#define DUK_USE_HOBJECT_HASH_PART
+#if defined(DUK_USE_OBJSIZES16)
+#undef DUK_USE_HOBJECT_HASH_PART
 #endif
 
 /*
@@ -2731,6 +3139,12 @@ typedef void (*duk_fatal_function) (duk_context *ctx, duk_errcode_t code, const 
 typedef void (*duk_decode_char_function) (void *udata, duk_codepoint_t codepoint);
 typedef duk_codepoint_t (*duk_map_char_function) (void *udata, duk_codepoint_t codepoint);
 typedef duk_ret_t (*duk_safe_call_function) (duk_context *ctx);
+typedef duk_size_t (*duk_debug_read_function) (void *udata, char *buffer, duk_size_t length);
+typedef duk_size_t (*duk_debug_write_function) (void *udata, const char *buffer, duk_size_t length);
+typedef duk_size_t (*duk_debug_peek_function) (void *udata);
+typedef void (*duk_debug_read_flush_function) (void *udata);
+typedef void (*duk_debug_write_flush_function) (void *udata);
+typedef void (*duk_debug_detached_function) (void *udata);
 
 struct duk_memory_functions {
 	duk_alloc_function alloc_func;
@@ -2760,7 +3174,16 @@ struct duk_number_list_entry {
  * have 99 for patch level (e.g. 0.10.99 would be a development version
  * after 0.10.0 but before the next official release).
  */
-#define DUK_VERSION                       10000L
+#define DUK_VERSION                       10202L
+
+/* Git describe for Duktape build.  Useful for non-official snapshot builds
+ * so that application code can easily log which Duktape snapshot was used.
+ * Not available in the Ecmascript environment.
+ */
+#define DUK_GIT_DESCRIBE                  "v1.2.2"
+
+/* Duktape debug protocol version used by this build. */
+#define DUK_DEBUG_PROTOCOL_VERSION        1
 
 /* Used to represent invalid index; if caller uses this without checking,
  * this index will map to a non-existent stack entry.  Also used in some
@@ -2788,6 +3211,7 @@ struct duk_number_list_entry {
 #define DUK_TYPE_OBJECT                   6    /* Ecmascript object: includes objects, arrays, functions, threads */
 #define DUK_TYPE_BUFFER                   7    /* fixed or dynamic, garbage collected byte buffer */
 #define DUK_TYPE_POINTER                  8    /* raw void pointer */
+#define DUK_TYPE_LIGHTFUNC                9    /* lightweight function pointer */
 
 /* Value mask types, used by e.g. duk_get_type_mask() */
 #define DUK_TYPE_MASK_NONE                (1 << DUK_TYPE_NONE)
@@ -2799,6 +3223,7 @@ struct duk_number_list_entry {
 #define DUK_TYPE_MASK_OBJECT              (1 << DUK_TYPE_OBJECT)
 #define DUK_TYPE_MASK_BUFFER              (1 << DUK_TYPE_BUFFER)
 #define DUK_TYPE_MASK_POINTER             (1 << DUK_TYPE_POINTER)
+#define DUK_TYPE_MASK_LIGHTFUNC           (1 << DUK_TYPE_LIGHTFUNC)
 #define DUK_TYPE_MASK_THROW               (1 << 10)  /* internal flag value: throw if mask doesn't match */
 
 /* Coercion hints */
@@ -2825,6 +3250,18 @@ struct duk_number_list_entry {
 #define DUK_COMPILE_NOSOURCE              (1 << 5)    /* (internal) no source string on stack */
 #define DUK_COMPILE_STRLEN                (1 << 6)    /* (internal) take strlen() of src_buffer (avoids double evaluation in macro) */
 
+/* Flags for duk_def_prop() and its variants */
+#define DUK_DEFPROP_WRITABLE              (1 << 0)    /* set writable (effective if DUK_DEFPROP_HAVE_WRITABLE set) */
+#define DUK_DEFPROP_ENUMERABLE            (1 << 1)    /* set enumerable (effective if DUK_DEFPROP_HAVE_ENUMERABLE set) */
+#define DUK_DEFPROP_CONFIGURABLE          (1 << 2)    /* set configurable (effective if DUK_DEFPROP_HAVE_CONFIGURABLE set) */
+#define DUK_DEFPROP_HAVE_WRITABLE         (1 << 3)    /* set/clear writable */
+#define DUK_DEFPROP_HAVE_ENUMERABLE       (1 << 4)    /* set/clear enumerable */
+#define DUK_DEFPROP_HAVE_CONFIGURABLE     (1 << 5)    /* set/clear configurable */
+#define DUK_DEFPROP_HAVE_VALUE            (1 << 6)    /* set value (given on value stack) */
+#define DUK_DEFPROP_HAVE_GETTER           (1 << 7)    /* set getter (given on value stack) */
+#define DUK_DEFPROP_HAVE_SETTER           (1 << 8)    /* set setter (given on value stack) */
+#define DUK_DEFPROP_FORCE                 (1 << 9)    /* force change if possible, may still fail for e.g. virtual properties */
+
 /* Flags for duk_push_thread_raw() */
 #define DUK_THREAD_NEW_GLOBAL_ENV         (1 << 0)    /* create a new global environment */
 
@@ -2832,6 +3269,7 @@ struct duk_number_list_entry {
 #define DUK_STRING_PUSH_SAFE              (1 << 0)    /* no error if file does not exist */
 
 /* Duktape specific error codes */
+#define DUK_ERR_NONE                      0    /* no error (e.g. from duk_get_error_code()) */
 #define DUK_ERR_UNIMPLEMENTED_ERROR       50   /* UnimplementedError */
 #define DUK_ERR_UNSUPPORTED_ERROR         51   /* UnsupportedError */
 #define DUK_ERR_INTERNAL_ERROR            52   /* InternalError */
@@ -2895,7 +3333,7 @@ DUK_EXTERNAL_DECL
 duk_context *duk_create_heap(duk_alloc_function alloc_func,
                              duk_realloc_function realloc_func,
                              duk_free_function free_func,
-                             void *alloc_udata,
+                             void *heap_udata,
                              duk_fatal_function fatal_handler);
 DUK_EXTERNAL_DECL void duk_destroy_heap(duk_context *ctx);
 
@@ -2922,11 +3360,13 @@ DUK_EXTERNAL_DECL void duk_gc(duk_context *ctx, duk_uint_t flags);
  */
 
 DUK_API_NORETURN(DUK_EXTERNAL_DECL void duk_throw(duk_context *ctx));
+DUK_API_NORETURN(DUK_EXTERNAL_DECL void duk_fatal(duk_context *ctx, duk_errcode_t err_code, const char *err_msg));
 
 DUK_API_NORETURN(DUK_EXTERNAL_DECL void duk_error_raw(duk_context *ctx, duk_errcode_t err_code, const char *filename, duk_int_t line, const char *fmt, ...));
+
 #ifdef DUK_API_VARIADIC_MACROS
 #define duk_error(ctx,err_code,...)  \
-	duk_error_raw((ctx), (duk_errcode_t) (err_code), __FILE__, (duk_int_t) __LINE__, __VA_ARGS__)
+	duk_error_raw((ctx), (duk_errcode_t) (err_code), (const char *) (__FILE__), (duk_int_t) (__LINE__), __VA_ARGS__)
 #else
 DUK_API_NORETURN(DUK_EXTERNAL_DECL void duk_error_stash(duk_context *ctx, duk_errcode_t err_code, const char *fmt, ...));
 /* One problem with this macro is that expressions like the following fail
@@ -2934,12 +3374,14 @@ DUK_API_NORETURN(DUK_EXTERNAL_DECL void duk_error_stash(duk_context *ctx, duk_er
  * they make little sense anyway.
  */
 #define duk_error  \
-	duk_api_global_filename = __FILE__, \
-	duk_api_global_line = (duk_int_t) __LINE__, \
-	duk_error_stash  /* arguments follow */
+	(duk_api_global_filename = (const char *) (__FILE__), \
+	 duk_api_global_line = (duk_int_t) (__LINE__), \
+	 duk_error_stash)  /* last value is func pointer, arguments follow in parens */
 #endif
 
-DUK_API_NORETURN(DUK_EXTERNAL_DECL void duk_fatal(duk_context *ctx, duk_errcode_t err_code, const char *err_msg));
+DUK_API_NORETURN(DUK_EXTERNAL_DECL void duk_error_va_raw(duk_context *ctx, duk_errcode_t err_code, const char *filename, duk_int_t line, const char *fmt, va_list ap));
+#define duk_error_va(ctx,err_code,fmt,ap)  \
+	duk_error_va_raw((ctx), (duk_errcode_t) (err_code), (const char *) (__FILE__), (duk_int_t) (__LINE__), (fmt), (ap))
 
 /*
  *  Other state related functions
@@ -3028,17 +3470,11 @@ DUK_EXTERNAL_DECL void duk_push_global_object(duk_context *ctx);
 DUK_EXTERNAL_DECL void duk_push_heap_stash(duk_context *ctx);
 DUK_EXTERNAL_DECL void duk_push_global_stash(duk_context *ctx);
 DUK_EXTERNAL_DECL void duk_push_thread_stash(duk_context *ctx, duk_context *target_ctx);
-//FIXME
-DUK_EXTERNAL_DECL void duk_push_object_pointer(duk_context *ctx, void *h);
-
-DUK_EXTERNAL_DECL duk_idx_t duk_push_heapptr(duk_context *ctx, void *ptr);
-DUK_EXTERNAL_DECL void *duk_get_heapptr(duk_context *ctx, duk_idx_t index);
-DUK_EXTERNAL_DECL void *duk_require_heapptr(duk_context *ctx, duk_idx_t index);
-
 
 DUK_EXTERNAL_DECL duk_idx_t duk_push_object(duk_context *ctx);
 DUK_EXTERNAL_DECL duk_idx_t duk_push_array(duk_context *ctx);
 DUK_EXTERNAL_DECL duk_idx_t duk_push_c_function(duk_context *ctx, duk_c_function func, duk_idx_t nargs);
+DUK_EXTERNAL_DECL duk_idx_t duk_push_c_lightfunc(duk_context *ctx, duk_c_function func, duk_idx_t nargs, duk_idx_t length, duk_int_t magic);
 DUK_EXTERNAL_DECL duk_idx_t duk_push_thread_raw(duk_context *ctx, duk_uint_t flags);
 
 #define duk_push_thread(ctx) \
@@ -3048,20 +3484,36 @@ DUK_EXTERNAL_DECL duk_idx_t duk_push_thread_raw(duk_context *ctx, duk_uint_t fla
 	duk_push_thread_raw((ctx), DUK_THREAD_NEW_GLOBAL_ENV /*flags*/)
 
 DUK_EXTERNAL_DECL duk_idx_t duk_push_error_object_raw(duk_context *ctx, duk_errcode_t err_code, const char *filename, duk_int_t line, const char *fmt, ...);
+
 #ifdef DUK_API_VARIADIC_MACROS
 #define duk_push_error_object(ctx,err_code,...)  \
-	duk_push_error_object_raw((ctx),(err_code),__FILE__,__LINE__,__VA_ARGS__)
+	duk_push_error_object_raw((ctx), (err_code), (const char *) (__FILE__), (duk_int_t) (__LINE__), __VA_ARGS__)
 #else
 DUK_EXTERNAL_DECL duk_idx_t duk_push_error_object_stash(duk_context *ctx, duk_errcode_t err_code, const char *fmt, ...);
+/* Note: parentheses are required so that the comma expression works in assignments. */
 #define duk_push_error_object  \
-	duk_api_global_filename = __FILE__, \
-	duk_api_global_line = __LINE__, \
-	duk_push_error_object_stash  /* arguments follow */
+	(duk_api_global_filename = (const char *) (__FILE__), \
+	 duk_api_global_line = (duk_int_t) (__LINE__), \
+	 duk_push_error_object_stash)  /* last value is func pointer, arguments follow in parens */
 #endif
 
-DUK_EXTERNAL_DECL void *duk_push_buffer(duk_context *ctx, duk_size_t size, duk_bool_t dynamic);
-DUK_EXTERNAL_DECL void *duk_push_fixed_buffer(duk_context *ctx, duk_size_t size);
-DUK_EXTERNAL_DECL void *duk_push_dynamic_buffer(duk_context *ctx, duk_size_t size);
+DUK_EXTERNAL_DECL duk_idx_t duk_push_error_object_va_raw(duk_context *ctx, duk_errcode_t err_code, const char *filename, duk_int_t line, const char *fmt, va_list ap);
+#define duk_push_error_object_va(ctx,err_code,fmt,ap)  \
+	duk_push_error_object_va_raw((ctx), (err_code), (const char *) (__FILE__), (duk_int_t) (__LINE__), (fmt), (ap))
+
+#define DUK_BUF_FLAG_DYNAMIC   (1 << 0)    /* internal flag: dynamic buffer */
+#define DUK_BUF_FLAG_NOZERO    (1 << 1)    /* internal flag: don't zero allocated buffer */
+
+DUK_EXTERNAL_DECL void *duk_push_buffer_raw(duk_context *ctx, duk_size_t size, duk_small_uint_t flags);
+
+#define duk_push_buffer(ctx,size,dynamic) \
+	duk_push_buffer_raw((ctx), (size), (dynamic));
+#define duk_push_fixed_buffer(ctx,size) \
+	duk_push_buffer_raw((ctx), (size), 0 /*dynamic*/)
+#define duk_push_dynamic_buffer(ctx,size) \
+	duk_push_buffer_raw((ctx), (size), 1 /*dynamic*/)
+
+DUK_EXTERNAL_DECL duk_idx_t duk_push_heapptr(duk_context *ctx, void *ptr);
 
 /*
  *  Pop operations
@@ -3094,6 +3546,7 @@ DUK_EXTERNAL_DECL duk_bool_t duk_is_string(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_bool_t duk_is_object(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_bool_t duk_is_buffer(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_bool_t duk_is_pointer(duk_context *ctx, duk_idx_t index);
+DUK_EXTERNAL_DECL duk_bool_t duk_is_lightfunc(duk_context *ctx, duk_idx_t index);
 
 DUK_EXTERNAL_DECL duk_bool_t duk_is_array(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_bool_t duk_is_function(duk_context *ctx, duk_idx_t index);
@@ -3113,7 +3566,12 @@ DUK_EXTERNAL_DECL duk_bool_t duk_is_primitive(duk_context *ctx, duk_idx_t index)
 	                                    DUK_TYPE_MASK_STRING | \
 	                                    DUK_TYPE_MASK_OBJECT | \
 	                                    DUK_TYPE_MASK_BUFFER | \
-	                                    DUK_TYPE_MASK_POINTER)
+	                                    DUK_TYPE_MASK_POINTER | \
+	                                    DUK_TYPE_MASK_LIGHTFUNC)
+
+DUK_EXTERNAL_DECL duk_errcode_t duk_get_error_code(duk_context *ctx, duk_idx_t index);
+#define duk_is_error(ctx,index) \
+	(duk_get_error_code((ctx), (index)) != 0)
 
 /*
  *  Get operations: no coercion, returns default value for invalid
@@ -3133,6 +3591,7 @@ DUK_EXTERNAL_DECL void *duk_get_buffer(duk_context *ctx, duk_idx_t index, duk_si
 DUK_EXTERNAL_DECL void *duk_get_pointer(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_c_function duk_get_c_function(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_context *duk_get_context(duk_context *ctx, duk_idx_t index);
+DUK_EXTERNAL_DECL void *duk_get_heapptr(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_size_t duk_get_length(duk_context *ctx, duk_idx_t index);
 
 /*
@@ -3155,6 +3614,7 @@ DUK_EXTERNAL_DECL void *duk_require_buffer(duk_context *ctx, duk_idx_t index, du
 DUK_EXTERNAL_DECL void *duk_require_pointer(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_c_function duk_require_c_function(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_context *duk_require_context(duk_context *ctx, duk_idx_t index);
+DUK_EXTERNAL_DECL void *duk_require_heapptr(duk_context *ctx, duk_idx_t index);
 
 #define duk_require_object_coercible(ctx,index) \
 	((void) duk_check_type_mask((ctx), (index), DUK_TYPE_MASK_BOOLEAN | \
@@ -3163,6 +3623,7 @@ DUK_EXTERNAL_DECL duk_context *duk_require_context(duk_context *ctx, duk_idx_t i
 	                                            DUK_TYPE_MASK_OBJECT | \
 	                                            DUK_TYPE_MASK_BUFFER | \
 	                                            DUK_TYPE_MASK_POINTER | \
+	                                            DUK_TYPE_MASK_LIGHTFUNC | \
 	                                            DUK_TYPE_MASK_THROW))
 
 /*
@@ -3183,13 +3644,22 @@ DUK_EXTERNAL_DECL duk_uint32_t duk_to_uint32(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL duk_uint16_t duk_to_uint16(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL const char *duk_to_string(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL const char *duk_to_lstring(duk_context *ctx, duk_idx_t index, duk_size_t *out_len);
-DUK_EXTERNAL_DECL void *duk_to_buffer(duk_context *ctx, duk_idx_t index, duk_size_t *out_size);
-DUK_EXTERNAL_DECL void *duk_to_fixed_buffer(duk_context *ctx, duk_idx_t index, duk_size_t *out_size);
-DUK_EXTERNAL_DECL void *duk_to_dynamic_buffer(duk_context *ctx, duk_idx_t index, duk_size_t *out_size);
+DUK_EXTERNAL_DECL void *duk_to_buffer_raw(duk_context *ctx, duk_idx_t index, duk_size_t *out_size, duk_uint_t flags);
 DUK_EXTERNAL_DECL void *duk_to_pointer(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL void duk_to_object(duk_context *ctx, duk_idx_t index);
 DUK_EXTERNAL_DECL void duk_to_defaultvalue(duk_context *ctx, duk_idx_t index, duk_int_t hint);
 DUK_EXTERNAL_DECL void duk_to_primitive(duk_context *ctx, duk_idx_t index, duk_int_t hint);
+
+#define DUK_BUF_MODE_FIXED      0   /* internal: request fixed buffer result */
+#define DUK_BUF_MODE_DYNAMIC    1   /* internal: request dynamic buffer result */
+#define DUK_BUF_MODE_DONTCARE   2   /* internal: don't care about fixed/dynamic nature */
+
+#define duk_to_buffer(ctx,index,out_size) \
+	duk_to_buffer_raw((ctx), (index), (out_size), DUK_BUF_MODE_DONTCARE)
+#define duk_to_fixed_buffer(ctx,index,out_size) \
+	duk_to_buffer_raw((ctx), (index), (out_size), DUK_BUF_MODE_FIXED)
+#define duk_to_dynamic_buffer(ctx,index,out_size) \
+	duk_to_buffer_raw((ctx), (index), (out_size), DUK_BUF_MODE_DYNAMIC)
 
 /* safe variants of a few coercion operations */
 DUK_EXTERNAL_DECL const char *duk_safe_to_lstring(duk_context *ctx, duk_idx_t index, duk_size_t *out_len);
@@ -3233,6 +3703,7 @@ DUK_EXTERNAL_DECL duk_bool_t duk_del_prop_index(duk_context *ctx, duk_idx_t obj_
 DUK_EXTERNAL_DECL duk_bool_t duk_has_prop(duk_context *ctx, duk_idx_t obj_index);
 DUK_EXTERNAL_DECL duk_bool_t duk_has_prop_string(duk_context *ctx, duk_idx_t obj_index, const char *key);
 DUK_EXTERNAL_DECL duk_bool_t duk_has_prop_index(duk_context *ctx, duk_idx_t obj_index, duk_uarridx_t arr_index);
+DUK_EXTERNAL_DECL void duk_def_prop(duk_context *ctx, duk_idx_t obj_index, duk_uint_t flags);
 
 DUK_EXTERNAL_DECL duk_bool_t duk_get_global_string(duk_context *ctx, const char *key);
 DUK_EXTERNAL_DECL duk_bool_t duk_put_global_string(duk_context *ctx, const char *key);
@@ -3341,19 +3812,19 @@ DUK_EXTERNAL_DECL duk_int_t duk_compile_raw(duk_context *ctx, const char *src_bu
 
 /* plain */
 #define duk_eval(ctx)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 (void) duk_eval_raw((ctx), NULL, 0, DUK_COMPILE_EVAL))
 
 #define duk_eval_noresult(ctx)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 (void) duk_eval_raw((ctx), NULL, 0, DUK_COMPILE_EVAL | DUK_COMPILE_NORESULT))
 
 #define duk_peval(ctx)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 duk_eval_raw((ctx), NULL, 0, DUK_COMPILE_EVAL | DUK_COMPILE_SAFE))
 
 #define duk_peval_noresult(ctx)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 duk_eval_raw((ctx), NULL, 0, DUK_COMPILE_EVAL | DUK_COMPILE_SAFE | DUK_COMPILE_NORESULT))
 
 #define duk_compile(ctx,flags)  \
@@ -3364,30 +3835,30 @@ DUK_EXTERNAL_DECL duk_int_t duk_compile_raw(duk_context *ctx, const char *src_bu
 
 /* string */
 #define duk_eval_string(ctx,src)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 (void) duk_eval_raw((ctx), (src), 0, DUK_COMPILE_EVAL | DUK_COMPILE_NOSOURCE | DUK_COMPILE_STRLEN))
 
 #define duk_eval_string_noresult(ctx,src)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 (void) duk_eval_raw((ctx), (src), 0, DUK_COMPILE_EVAL | DUK_COMPILE_NOSOURCE | DUK_COMPILE_STRLEN | DUK_COMPILE_NORESULT))
 
 #define duk_peval_string(ctx,src)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 duk_eval_raw((ctx), (src), 0, DUK_COMPILE_EVAL | DUK_COMPILE_SAFE | DUK_COMPILE_NOSOURCE | DUK_COMPILE_STRLEN))
 
 #define duk_peval_string_noresult(ctx,src)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 duk_eval_raw((ctx), (src), 0, DUK_COMPILE_EVAL | DUK_COMPILE_SAFE | DUK_COMPILE_NOSOURCE | DUK_COMPILE_STRLEN | DUK_COMPILE_NORESULT))
 
 #define duk_compile_string(ctx,flags,src)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 (void) duk_compile_raw((ctx), (src), 0, (flags) | DUK_COMPILE_NOSOURCE | DUK_COMPILE_STRLEN))
 
 #define duk_compile_string_filename(ctx,flags,src)  \
 	((void) duk_compile_raw((ctx), (src), 0, (flags) | DUK_COMPILE_NOSOURCE | DUK_COMPILE_STRLEN))
 
 #define duk_pcompile_string(ctx,flags,src)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 duk_compile_raw((ctx), (src), 0, (flags) | DUK_COMPILE_SAFE | DUK_COMPILE_NOSOURCE | DUK_COMPILE_STRLEN))
 
 #define duk_pcompile_string_filename(ctx,flags,src)  \
@@ -3395,30 +3866,30 @@ DUK_EXTERNAL_DECL duk_int_t duk_compile_raw(duk_context *ctx, const char *src_bu
 
 /* lstring */
 #define duk_eval_lstring(ctx,buf,len)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 (void) duk_eval_raw((ctx), buf, len, DUK_COMPILE_EVAL | DUK_COMPILE_NOSOURCE))
 
 #define duk_eval_lstring_noresult(ctx,buf,len)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 (void) duk_eval_raw((ctx), buf, len, DUK_COMPILE_EVAL | DUK_COMPILE_NOSOURCE | DUK_COMPILE_NORESULT))
 
 #define duk_peval_lstring(ctx,buf,len)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 duk_eval_raw((ctx), buf, len, DUK_COMPILE_EVAL | DUK_COMPILE_NOSOURCE | DUK_COMPILE_SAFE))
 
 #define duk_peval_lstring_noresult(ctx,buf,len)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 duk_eval_raw((ctx), buf, len, DUK_COMPILE_EVAL | DUK_COMPILE_SAFE | DUK_COMPILE_NOSOURCE | DUK_COMPILE_NORESULT))
 
 #define duk_compile_lstring(ctx,flags,buf,len)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 (void) duk_compile_raw((ctx), buf, len, (flags) | DUK_COMPILE_NOSOURCE))
 
 #define duk_compile_lstring_filename(ctx,flags,buf,len)  \
 	((void) duk_compile_raw((ctx), buf, len, (flags) | DUK_COMPILE_NOSOURCE))
 
 #define duk_pcompile_lstring(ctx,flags,buf,len)  \
-	((void) duk_push_string((ctx), __FILE__), \
+	((void) duk_push_string((ctx), (const char *) (__FILE__)), \
 	 duk_compile_raw((ctx), buf, len, (flags) | DUK_COMPILE_SAFE | DUK_COMPILE_NOSOURCE))
 
 #define duk_pcompile_lstring_filename(ctx,flags,buf,len)  \
@@ -3460,6 +3931,7 @@ DUK_EXTERNAL_DECL duk_int_t duk_compile_raw(duk_context *ctx, const char *src_bu
  */
 
 DUK_EXTERNAL_DECL void duk_log(duk_context *ctx, duk_int_t level, const char *fmt, ...);
+DUK_EXTERNAL_DECL void duk_log_va(duk_context *ctx, duk_int_t level, const char *fmt, va_list ap);
 
 /*
  *  Debugging
@@ -3483,6 +3955,21 @@ DUK_EXTERNAL_DECL void duk_push_context_dump(duk_context *ctx);
 #define duk_dump_context_stdout(ctx)  ((void) 0)
 #define duk_dump_context_stderr(ctx)  ((void) 0)
 #endif  /* DUK_USE_FILE_IO */
+
+/*
+ *  Debugger (debug protocol)
+ */
+
+DUK_EXTERNAL_DECL void duk_debugger_attach(duk_context *ctx,
+                                           duk_debug_read_function read_cb,
+                                           duk_debug_write_function write_cb,
+                                           duk_debug_peek_function peek_cb,
+                                           duk_debug_read_flush_function read_flush_cb,
+                                           duk_debug_write_flush_function write_flush_cb,
+                                           duk_debug_detached_function detached_cb,
+                                           void *udata);
+DUK_EXTERNAL_DECL void duk_debugger_detach(duk_context *ctx);
+DUK_EXTERNAL_DECL void duk_debugger_cooperate(duk_context *ctx);
 
 /*
  *  C++ name mangling
@@ -3561,6 +4048,24 @@ DUK_EXTERNAL_DECL void duk_push_context_dump(duk_context *ctx);
 #error DUK_USE_DDDPRINT without DUK_USE_DEBUG
 #endif
 
+#if defined(DUK_USE_HEAPPTR16) && defined(DUK_USE_DEBUG)
+/* Debug code doesn't have access to 'heap' so it cannot decode pointers. */
+#error debug printing cannot currently be used with heap pointer compression
+#endif
+
+/*
+ *  Debugger consistency
+ */
+
+#if defined(DUK_USE_DEBUGGER_SUPPORT)
+#if !defined(DUK_USE_INTERRUPT_COUNTER)
+#error DUK_USE_INTERRUPT_COUNTER is needed when debugger support is enabled
+#endif
+#if !defined(DUK_USE_PC2LINE)
+#error DUK_USE_PC2LINE is needed when debugger support is enabled
+#endif
+#endif
+
 /*
  *  Garbage collection consistency
  */
@@ -3571,6 +4076,23 @@ DUK_EXTERNAL_DECL void duk_push_context_dump(duk_context *ctx);
 
 #if defined(DUK_USE_GC_TORTURE) && !defined(DUK_USE_MARK_AND_SWEEP)
 #error DUK_USE_GC_TORTURE defined without DUK_USE_MARK_AND_SWEEP
+#endif
+
+/*
+ *  Low memory feature consistency
+ */
+
+#if defined(DUK_USE_OBJSIZES16)
+#if defined(DUK_USE_HOBJECT_HASH_PART)
+#error DUK_USE_OBJSIZES16 assumes DUK_USE_HOBJECT_HASH_PART is not defined
+#endif
+#endif
+
+#if defined(DUK_USE_STRTAB_CHAIN) && defined(DUK_USE_STRTAB_PROBE)
+#error both DUK_USE_STRTAB_CHAIN and DUK_USE_STRTAB_PROBE defined
+#endif
+#if !defined(DUK_USE_STRTAB_CHAIN) && !defined(DUK_USE_STRTAB_PROBE)
+#error neither DUK_USE_STRTAB_CHAIN nor DUK_USE_STRTAB_PROBE is defined
 #endif
 
 #endif  /* DUK_FEATURES_SANITY_H_INCLUDED */
@@ -3753,6 +4275,25 @@ typedef union duk_double_union duk_double_union;
 #define DUK_DBLUNION_GET_HIGH32(u)  ((u)->ui[DUK_DBL_IDX_UI0])
 #define DUK_DBLUNION_GET_LOW32(u)   ((u)->ui[DUK_DBL_IDX_UI1])
 
+#ifdef DUK_USE_64BIT_OPS
+#ifdef DUK_USE_DOUBLE_ME
+#define DUK_DBLUNION_SET_UINT64(u,v)  do { \
+		(u)->ui[DUK_DBL_IDX_UI0] = (duk_uint32_t) ((v) >> 32); \
+		(u)->ui[DUK_DBL_IDX_UI1] = (duk_uint32_t) (v); \
+	} while (0)
+#define DUK_DBLUNION_GET_UINT64(u) \
+	((((duk_uint64_t) (u)->ui[DUK_DBL_IDX_UI0]) << 32) | \
+	 ((duk_uint64_t) (u)->ui[DUK_DBL_IDX_UI1]))
+#else
+#define DUK_DBLUNION_SET_UINT64(u,v)  do { \
+		(u)->ull[DUK_DBL_IDX_ULL0] = (duk_uint64_t) (v); \
+	} while (0)
+#define DUK_DBLUNION_GET_UINT64(u)  ((u)->ull[DUK_DBL_IDX_ULL0])
+#endif
+#define DUK_DBLUNION_SET_INT64(u,v) DUK_DBLUNION_SET_UINT64((u), (duk_uint64_t) (v))
+#define DUK_DBLUNION_GET_INT64(u)   ((duk_int64_t) DUK_DBLUNION_GET_UINT64((u)))
+#endif  /* DUK_USE_64BIT_OPS */
+
 /*
  *  Double NaN manipulation macros related to NaN normalization needed when
  *  using the packed duk_tval representation.  NaN normalization is necessary
@@ -3885,6 +4426,33 @@ typedef union duk_double_union duk_double_union;
 		(u)->d = DUK_DOUBLE_NAN; \
 	} while (0)
 #endif  /* DUK_USE_PACKED_TVAL */
+
+/* Byteswap an (aligned) duk_double_union. */
+#if defined(DUK_USE_DOUBLE_LE)
+#define DUK_DBLUNION_BSWAP(u) do { \
+		duk_uint32_t duk__bswaptmp1, duk__bswaptmp2; \
+		duk__bswaptmp1 = (u)->ui[0]; \
+		duk__bswaptmp2 = (u)->ui[1]; \
+		duk__bswaptmp1 = DUK_BSWAP32(duk__bswaptmp1); \
+		duk__bswaptmp2 = DUK_BSWAP32(duk__bswaptmp2); \
+		(u)->ui[0] = duk__bswaptmp2; \
+		(u)->ui[1] = duk__bswaptmp1; \
+	} while (0)
+#elif defined(DUK_USE_DOUBLE_ME)
+#define DUK_DBLUNION_BSWAP(u) do { \
+		duk_uint32_t duk__bswaptmp1, duk__bswaptmp2; \
+		duk__bswaptmp1 = (u)->ui[0]; \
+		duk__bswaptmp2 = (u)->ui[1]; \
+		duk__bswaptmp1 = DUK_BSWAP32(duk__bswaptmp1); \
+		duk__bswaptmp2 = DUK_BSWAP32(duk__bswaptmp2); \
+		(u)->ui[0] = duk__bswaptmp1; \
+		(u)->ui[1] = duk__bswaptmp2; \
+	} while (0)
+#elif defined(DUK_USE_DOUBLE_BE)
+#define DUK_DBLUNION_BSWAP(u) do { } while (0)
+#else
+#error internal error, double endianness insane
+#endif
 
 #endif  /* DUK_DBLUNION_H_INCLUDED */
 

@@ -14,6 +14,7 @@ extern char **environ;
 
 /* ALL Bindings ar directly included from main.h */
 static const duk_function_list_entry bindings_funcs[] = {
+    { "coro"        , init_binding_coro,      0 },
     { "worker"      , init_binding_worker,    0 },
     { "buffer"      , init_binding_buffer,    0 },
     { "loop"        , init_binding_loop,      0 },
@@ -22,12 +23,12 @@ static const duk_function_list_entry bindings_funcs[] = {
     { "errno"       , init_binding_errno,     0 },
     { "io"          , init_binding_io,        0 },
     { "readline"    , init_binding_readline,  0 },
+    { "tty"         , init_binding_tty,       0 },
+    { "fs"          , init_binding_fs,        0 },
+    { "tls"         , init_binding_tls,       0 },
+    { "crypto"      , init_binding_crypto,    0 },
     { NULL          , NULL, 0 }
 };
-
-static void debug_top(duk_context *ctx){
-    printf("stack top is %ld\n", (long) duk_get_top(ctx));
-}
 
 /** 
   * quick substring function for parsing ENV
@@ -68,7 +69,7 @@ static void _como_parse_environment (duk_context *ctx, duk_idx_t obj_idx){
             ENV_name = substring(s, 0, index);
             
             /* pass equal sign */
-            *ENV_value++;
+            ENV_value++;
             
             duk_push_string(ctx, ENV_value);
             duk_put_prop_string(ctx, sub_obj_idx, ENV_name);
@@ -85,7 +86,7 @@ static void _como_parse_environment (duk_context *ctx, duk_idx_t obj_idx){
 /** 
   * process.isFile(num)
 ******************************************************************************/
-static const int process_isFile(duk_context *ctx) {
+COMO_METHOD(como_process_isFile) {
     const char *filename = duk_get_string(ctx, 0);
     struct stat buffer;
     if (stat (filename, &buffer) == 0) {
@@ -99,10 +100,10 @@ static const int process_isFile(duk_context *ctx) {
 /** 
   * process.readFile(filename);
 ******************************************************************************/
-const int process_readFile(duk_context *ctx) {
-    const char *filename = duk_to_string(ctx, 0);
+COMO_METHOD(como_process_readFile) {
+    const char *filename = duk_get_string(ctx, 0);
     FILE *f = NULL;
-    long len;
+    size_t len;
     void *buf;
     size_t got;
     if (!filename) {
@@ -117,9 +118,9 @@ const int process_readFile(duk_context *ctx) {
     len = ftell(f);
     if (fseek(f, 0, SEEK_SET) != 0) goto error;
     
-    buf = duk_push_fixed_buffer(ctx, (size_t) len);
+    buf = duk_push_fixed_buffer(ctx, len);
     got = fread(buf, 1, len, f);
-    if (got != (size_t) len) goto error;
+    if (got != len) goto error;
     
     fclose(f);
     f = NULL;
@@ -136,8 +137,9 @@ const int process_readFile(duk_context *ctx) {
 /** 
   * process.sleep(num);
 ******************************************************************************/
-static const int process_sleep(duk_context *ctx) {
+COMO_METHOD(como_process_sleep) {
     int milliseconds = duk_get_int(ctx, 0);
+    duk_pop(ctx);
     #ifdef _WIN32
         Sleep(milliseconds);
     #else
@@ -149,7 +151,7 @@ static const int process_sleep(duk_context *ctx) {
 /** 
   * process.cwd();
 ******************************************************************************/
-static const int process_cwd(duk_context *ctx) {
+COMO_METHOD(como_process_cwd) {
     char cwd[1024];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         duk_push_string(ctx, cwd);
@@ -162,7 +164,7 @@ static const int process_cwd(duk_context *ctx) {
 /** 
   * process.eval(str);
 ******************************************************************************/
-static const int process_eval(duk_context *ctx) {
+COMO_METHOD(como_process_eval) {
     const char *buf = duk_get_string(ctx, 0);
     const char *filename = duk_get_string(ctx, 1);
     duk_push_string(ctx, filename);
@@ -179,7 +181,7 @@ static const int process_eval(duk_context *ctx) {
 /** 
   * process.exit(exit_status);
 ******************************************************************************/
-static const int process_exit(duk_context *ctx) {
+COMO_METHOD(como_process_exit) {
     int exitCode = duk_get_int(ctx, 0);
     duk_destroy_heap(ctx);
     exit(exitCode);
@@ -189,7 +191,7 @@ static const int process_exit(duk_context *ctx) {
 /** 
   * process.dlOpen(shared_library);
 ******************************************************************************/
-static const int process_dllOpen(duk_context *ctx) {
+COMO_METHOD(como_process_dllOpen) {
     const char *ModuleName = duk_get_string(ctx, 0);
 
     void * handle = dlopen(ModuleName, RTLD_LAZY);
@@ -222,19 +224,19 @@ static const int process_dllOpen(duk_context *ctx) {
   * process exported functions list
 ******************************************************************************/
 const duk_function_list_entry process_funcs[] = {
-    { "isFile"  , process_isFile, 1 },
-    { "readFile", process_readFile, 1 },
-    { "cwd"     , process_cwd, 0 },
-    { "eval"    , process_eval, 2 },
-    { "sleep"   , process_sleep, 1 },
-    { "dllOpen" , process_dllOpen, 2 },
-    { "exit"    , process_exit, 1 },
+    { "isFile"  , como_process_isFile, 1 },
+    { "readFile", como_process_readFile, 1 },
+    { "cwd"     , como_process_cwd, 0 },
+    { "eval"    , como_process_eval, 2 },
+    { "sleep"   , como_process_sleep, 1 },
+    { "dllOpen" , como_process_dllOpen, 2 },
+    { "exit"    , como_process_exit, 1 },
     { NULL, NULL, 0 }
 };
 
-duk_context *como_create_new_heap (int argc, char *argv[]) {
+duk_context *como_create_new_heap (int argc, char *argv[], void *error_handle) {
 
-    duk_context *ctx = duk_create_heap(NULL,NULL,NULL,NULL,NULL);
+    duk_context *ctx = duk_create_heap(NULL, NULL, NULL, NULL, error_handle);
 
     duk_push_global_object(ctx);
     duk_push_object(ctx);
@@ -254,7 +256,7 @@ duk_context *como_create_new_heap (int argc, char *argv[]) {
     /* argv */
     duk_idx_t arr_idx = duk_push_array(ctx);
     int i = 0;
-    for (i; i < argc; i++){
+    for (i = 0; i < argc; i++){
         duk_push_string(ctx, argv[i]);
         duk_put_prop_index(ctx, arr_idx, i);
     }
@@ -278,23 +280,22 @@ duk_context *como_create_new_heap (int argc, char *argv[]) {
 }
 
 void como_run (duk_context *ctx){
-    if (duk_peval_file(ctx, "lib/main.js") != 0) {
+    if (duk_peval_file(ctx, "js/main.js") != 0) {
         printf("%s\n", duk_safe_to_string(ctx, -2));
         duk_destroy_heap(ctx);
         exit(1);
     }
 }
 
+#ifndef COMO_SHARED
 int main(int argc, char *argv[], char** envp) {
     (void) argc; (void) argv;
     
-    mtx_init(&gMainThread, mtx_plain);
-    
-    duk_context *ctx = como_create_new_heap(argc, argv);
+    duk_context *ctx = como_create_new_heap(argc, argv, NULL);
     como_run(ctx);
     duk_pop(ctx);  /* pop eval result */
 
-    //debug_top(ctx);
     duk_destroy_heap(ctx);
     return 0;
 }
+#endif

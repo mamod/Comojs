@@ -700,7 +700,7 @@ ParseAndPrintString( HANDLE hDev,
 {
   DWORD   i;
   LPCTSTR s;
-  //tty_enter_critical_section();
+  tty_enter_critical_section();
   if (hDev != hConOut)	// reinit if device has changed
   {
     hConOut = hDev;
@@ -806,7 +806,7 @@ ParseAndPrintString( HANDLE hDev,
   if (lpNumberOfBytesWritten != NULL)
     *lpNumberOfBytesWritten = nNumberOfBytesToWrite - i;
   
-  //tty_leave_critical_section();
+  tty_leave_critical_section();
   return (i == 0);
 }
 

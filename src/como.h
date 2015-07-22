@@ -24,7 +24,7 @@ const char *_COMO_MODULE_PATH = "";
 #endif
 
 //FIXME : Error checking?
-static void como_require(duk_context *ctx, const char *file) {
+void como_require(duk_context *ctx, const char *file) {
     duk_push_global_stash(ctx);
     duk_get_prop_string(ctx, -1, "modules");
     duk_get_prop_string(ctx, -1, _COMO_MODULE_PATH);
@@ -32,7 +32,7 @@ static void como_require(duk_context *ctx, const char *file) {
     duk_call(ctx, 1);
 }
 
-static void como_import(duk_context *ctx, const char *prop, const char *module) {
+void como_import(duk_context *ctx, const char *prop, const char *module) {
     como_require(ctx, module);
     duk_get_prop_string(ctx, -1, prop);
 }

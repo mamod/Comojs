@@ -1,22 +1,8 @@
 #include <fcntl.h>
 #include "inet.c"
-
-#ifdef _WIN32
-    //windows compatable error codes
-    int _WSLASTERROR (){
-        int er = WSAGetLastError();
-        if (er == WSAEINVAL){
-            return EINVAL;
-        }
-        return er;
-    }
-    
-    #define GetSockError _WSLASTERROR()
-#else
-    #define SOCKET int
-    #define INVALID_SOCKET -1
-    #define SOCKET_ERROR -1
-    #define GetSockError errno
+#include "como_errno.h"
+#ifndef _WIN32
+    #include <net/if.h>
 #endif
 
 struct in6_addr como_anyaddr6  = IN6ADDR_ANY_INIT;
@@ -26,11 +12,11 @@ struct in6_addr como_loopback6 = IN6ADDR_LOOPBACK_INIT;
   getprotobyname Return proto num id from name string 
   socket.getprotobyname('tcp');
  ============================================================================*/
-static const int como_sock_getprotobyname(duk_context *ctx) {
+COMO_METHOD(como_sock_getprotobyname) {
     const char* name = duk_require_string(ctx, 0);
 
-    int iResult = 0;
     #ifdef _WIN32
+        int iResult = 0;
         WSADATA wsaData = {0};
         iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (iResult != 0) {
@@ -55,7 +41,7 @@ static const int como_sock_getprotobyname(duk_context *ctx) {
 /*=============================================================================
   Returns array of ip address and port of address structure
  ============================================================================*/
-static const int como_sock_address_info(duk_context *ctx) {
+COMO_METHOD(como_sock_address_info) {
     struct sockaddr *addr = duk_require_pointer(ctx, 0);
 
     duk_idx_t arr_idx = duk_push_array(ctx);
@@ -63,14 +49,14 @@ static const int como_sock_address_info(duk_context *ctx) {
     char dst[128];
     switch (addr->sa_family) {
         #ifndef _WIN32
-        case AF_UNIX: {
-            struct sockaddr_un * addr_un = (struct sockaddr_un *) addr;
-            // duk_push_string(ctx, addr_un->sun_path);
-            // duk_put_prop_index(ctx, arr_idx, 0);
-            duk_push_null(ctx);
-            duk_put_prop_index(ctx, arr_idx, 1);
-            return 1;
-        } break;
+            case AF_UNIX: {
+                // struct sockaddr_un * addr_un = (struct sockaddr_un *) addr;
+                // duk_push_string(ctx, addr_un->sun_path);
+                // duk_put_prop_index(ctx, arr_idx, 0);
+                duk_push_null(ctx);
+                duk_put_prop_index(ctx, arr_idx, 1);
+                return 1;
+            } break;
         #endif
         
         case AF_INET6: {
@@ -104,7 +90,7 @@ static const int como_sock_address_info(duk_context *ctx) {
 /*=============================================================================
   Returns family of ip structure
  ============================================================================*/
-static const int como_sock_get_family(duk_context *ctx) {
+COMO_METHOD(como_sock_get_family) {
     struct sockaddr *addr = duk_require_pointer(ctx, 0);
     duk_push_int(ctx, addr->sa_family);
     return 1;
@@ -118,7 +104,7 @@ static const int como_sock_get_family(duk_context *ctx) {
   4 => ipv4
   6 => ipv6
  ============================================================================*/
-static const int como_sock_isIP(duk_context *ctx) {
+COMO_METHOD(como_sock_isIP) {
     const char *ip = duk_require_string(ctx, 0);
 
     int rc = 0;
@@ -137,8 +123,7 @@ static const int como_sock_isIP(duk_context *ctx) {
   returns address structure of the peer connected to the socket
   socket.getpeername(sockfd);
  ============================================================================*/
-
-static const int como_sock_getpeername(duk_context *ctx) {
+COMO_METHOD(como_sock_getpeername) {
     SOCKET sock = duk_require_int(ctx, 0);
     struct sockaddr *addr = malloc(sizeof(*addr));
     memset(addr, 0, sizeof(*addr));
@@ -149,7 +134,7 @@ static const int como_sock_getpeername(duk_context *ctx) {
     if (result == 0) {
         duk_push_pointer(ctx, (void *)addr);
     } else {
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     return 1;
@@ -159,7 +144,7 @@ static const int como_sock_getpeername(duk_context *ctx) {
   Rerurns IP structire to which the socket sockfd is bound
   socket.getsockname(sockfd);
  ============================================================================*/
-static const int como_sock_getsockname(duk_context *ctx) {
+COMO_METHOD(como_sock_getsockname) {
     SOCKET sock = duk_require_int(ctx, 0);
 
     struct sockaddr_storage *addr = malloc(sizeof(*addr));
@@ -170,7 +155,7 @@ static const int como_sock_getsockname(duk_context *ctx) {
     if (result == 0) {
         duk_push_pointer(ctx, (void *)addr);
     } else {
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     return 1;
@@ -179,7 +164,7 @@ static const int como_sock_getsockname(duk_context *ctx) {
 /*=============================================================================
   setsockopt - set options on sockets
  ============================================================================*/
-static const int como_sock_setsockopt(duk_context *ctx) {
+COMO_METHOD(como_sock_setsockopt) {
     SOCKET s    = duk_get_int(ctx, 0);
     int level   = duk_require_int(ctx, 1);
     int optname = duk_require_int(ctx,2);
@@ -189,7 +174,7 @@ static const int como_sock_setsockopt(duk_context *ctx) {
     if (setsockopt(s, level, optname, (char *) &optval, optlen) ==
          SOCKET_ERROR){
         
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     duk_push_true(ctx);
@@ -199,15 +184,15 @@ static const int como_sock_setsockopt(duk_context *ctx) {
 /*=============================================================================
   getsockopt - get options on sockets
  ============================================================================*/
-static const int como_sock_getsockopt(duk_context *ctx) {
+COMO_METHOD(como_sock_getsockopt) {
     SOCKET s    = duk_require_int(ctx, 0);
     int level   = duk_require_int(ctx, 1);
     int optname = duk_require_int(ctx,2);
     
     int valopt; 
-    int lon = sizeof(valopt);
-    if (getsockopt(s, level, optname, (char*)(&valopt), &lon) == SOCKET_ERROR){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+    socklen_t lon = sizeof(valopt);
+    if (getsockopt(s, level, optname, (char *)(&valopt), &lon) == SOCKET_ERROR){
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
 
     duk_push_int(ctx, valopt);
@@ -217,7 +202,7 @@ static const int como_sock_getsockopt(duk_context *ctx) {
 /*=============================================================================
   pton4
  ============================================================================*/
-static const int como_sock_inet_pton4(duk_context *ctx) {
+COMO_METHOD(como_sock_inet_pton4) {
 
     int port       = duk_require_int(ctx,1);
     
@@ -250,9 +235,9 @@ static const int como_sock_inet_pton4(duk_context *ctx) {
 /*=============================================================================
   pton6
  ============================================================================*/
-static const int como_sock_inet_pton6(duk_context *ctx) {
+COMO_METHOD(como_sock_inet_pton6) {
 
-    int port       = duk_require_int(ctx,1);
+    int port = duk_require_int(ctx,1);
     
     struct sockaddr_in6 *addr = malloc(sizeof(*addr));
     memset(addr, 0, sizeof(*addr));
@@ -267,13 +252,11 @@ static const int como_sock_inet_pton6(duk_context *ctx) {
     const char *ip;
     if (duk_is_number(ctx, 0)) {
         int inaddr = duk_get_int(ctx, 0);
-        //#if defined(in6addr_any)
         if (inaddr == INADDR_ANY) {
             addr->sin6_addr = como_anyaddr6;
         } else if (inaddr == INADDR_LOOPBACK){
             addr->sin6_addr = como_loopback6;
         }
-        //#endif
         goto end;
     } else {
         ip = duk_require_string(ctx,0);
@@ -310,7 +293,7 @@ static const int como_sock_inet_pton6(duk_context *ctx) {
 /*=============================================================================
   pton
  ============================================================================*/
-static const int como_sock_inet_pton(duk_context *ctx) {
+COMO_METHOD(como_sock_inet_pton) {
     errno = 0;
     int ret = como_sock_inet_pton4(ctx);
     if (errno == EINVAL){
@@ -323,7 +306,7 @@ static const int como_sock_inet_pton(duk_context *ctx) {
 /*=============================================================================
   ntop4
  ============================================================================*/
-static const int como_sock_inet_ntop4(duk_context *ctx) {
+COMO_METHOD(como_sock_inet_ntop4) {
     struct sockaddr_in *addr = duk_require_pointer(ctx,0);
     
     char dst[32];
@@ -341,7 +324,7 @@ static const int como_sock_inet_ntop4(duk_context *ctx) {
 /*=============================================================================
   ntop6
  ============================================================================*/
-static const int como_sock_inet_ntop6(duk_context *ctx) {
+COMO_METHOD(como_sock_inet_ntop6) {
     struct sockaddr_in6 *addr = duk_require_pointer(ctx,0);
     
     char dst[128];
@@ -359,7 +342,7 @@ static const int como_sock_inet_ntop6(duk_context *ctx) {
 /*=============================================================================
   ntop
  ============================================================================*/
-static const int como_sock_inet_ntop(duk_context *ctx) {
+COMO_METHOD(como_sock_inet_ntop) {
     struct sockaddr *addr = duk_require_pointer(ctx,0);
     
     if (addr->sa_family == AF_INET){
@@ -378,13 +361,13 @@ static const int como_sock_inet_ntop(duk_context *ctx) {
 /*=============================================================================
   create socket
  ============================================================================*/
-static const int como_sock_socket(duk_context *ctx) {
+COMO_METHOD(como_sock_socket) {
     int af       = duk_require_int(ctx, 0);
     int type     = duk_require_int(ctx, 1);
     int protocol = duk_require_int(ctx,2);
     
-    int iResult = 0;
     #ifdef _WIN32
+        int iResult = 0;
         WSADATA wsaData = {0};
         iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (iResult != 0) {
@@ -394,7 +377,7 @@ static const int como_sock_socket(duk_context *ctx) {
     
     SOCKET sock = socket(af, type, protocol);
     if (sock == INVALID_SOCKET){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     duk_push_int(ctx, sock);
@@ -404,7 +387,7 @@ static const int como_sock_socket(duk_context *ctx) {
 /*=============================================================================
   bind
  ============================================================================*/
-static const int como_sock_bind(duk_context *ctx) {
+COMO_METHOD(como_sock_bind) {
     SOCKET s              = duk_require_int(ctx, 0);
     struct sockaddr *addr = duk_require_pointer(ctx,1);
     
@@ -418,7 +401,7 @@ static const int como_sock_bind(duk_context *ctx) {
     }
     
     if (bind(s, addr, addrlen) == SOCKET_ERROR){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     duk_push_true(ctx);
@@ -434,12 +417,12 @@ static const int como_sock_bind(duk_context *ctx) {
    * @param {Number} backlog number of max connections
 
  ============================================================================*/
-static const int como_sock_listen(duk_context *ctx) {
+COMO_METHOD(como_sock_listen) {
     SOCKET s    = duk_require_int(ctx, 0);
     int backlog = duk_require_int(ctx, 1);
     
     if (listen(s, backlog) == SOCKET_ERROR){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     duk_push_true(ctx);
@@ -454,7 +437,7 @@ static const int como_sock_listen(duk_context *ctx) {
   * @param {Pointer} packed ip address
 
  ============================================================================*/
-static const int como_sock_connect(duk_context *ctx) {
+COMO_METHOD(como_sock_connect) {
     SOCKET s              = duk_require_int(ctx, 0);
     struct sockaddr *addr = duk_require_pointer(ctx, 1);
     
@@ -468,7 +451,7 @@ static const int como_sock_connect(duk_context *ctx) {
     }
     
     if (connect(s, addr, addrlen) == SOCKET_ERROR){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     duk_push_true(ctx);
@@ -481,19 +464,18 @@ static const int como_sock_connect(duk_context *ctx) {
   
   * @param {SOCKET} socket fd/handle 
  ============================================================================*/
-static const int como_sock_accept(duk_context *ctx) {
+COMO_METHOD(como_sock_accept) {
     SOCKET s = duk_require_int(ctx, 0);
     
     SOCKET peer = accept(s, NULL, NULL);
     if (peer ==  INVALID_SOCKET){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     duk_push_int(ctx, peer);
     return 1;
 }
 
 int como_core_nonblock(int fd, int set) {
-    int flags;
     int r;
     #ifdef _WIN32
         u_long iMode = set;
@@ -502,6 +484,7 @@ int como_core_nonblock(int fd, int set) {
             return WSAGetLastError();
         }
     #else
+        int flags;
         do {
             r = fcntl(fd, F_GETFL);
         } while (r == -1 && errno == EINTR);
@@ -538,10 +521,9 @@ int como_core_nonblock(int fd, int set) {
   * @param {SET} (0|1) 1 for marking socket as non blocking, 0 for blocking
 
  ============================================================================*/
-static const int como_sock_nonblock(duk_context *ctx) {
+COMO_METHOD(como_sock_nonblock) {
     SOCKET s = duk_require_int(ctx, 0);
     int set  = duk_require_int(ctx, 1);
-
     int ret  = como_core_nonblock(s,set);
     if (ret) {
         COMO_SET_ERRNO_AND_RETURN(ctx, ret);
@@ -554,59 +536,85 @@ static const int como_sock_nonblock(duk_context *ctx) {
 /*=============================================================================
   recv
  ============================================================================*/
-static const int como_sock_recv (duk_context *ctx) {
+COMO_METHOD(como_sock_recv) {
     SOCKET fd  = duk_require_int(ctx, 0);
     size_t len = (size_t)duk_require_int(ctx, 1);
-    int flags  = duk_get_int(ctx, 2);
-    
-    char *buf = duk_push_fixed_buffer(ctx, len);
-    size_t n = recv(fd, buf, len, flags);
-    if (n == -1){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+    int flags  = duk_get_int(ctx, 2); /* default to zero */
+
+    char buf[len];
+    size_t nread;
+    do {
+        nread = recv(fd, buf, len, flags);
+    } while (nread < 0 && COMO_GET_LAST_WSA_ERROR == SOCKEINTR);
+
+    if (nread == -1){
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
+    } else if (nread == 0){
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMOEOF);
     }
-    //if (n == 0) COMO_SET_ERRNO_AND_RETURN(ctx, 4095);
-    if (n < len) duk_push_lstring(ctx, buf, n);
+    
+    duk_push_lstring(ctx, buf, nread);
     return 1;
 }
 
 /*=============================================================================
-  recv buffer
+  read into buffer
+
+  ex:
+  var readBytes = socket.readIntoBuffer(fd, buffer, recv flags);
  ============================================================================*/
-static const int como_sock_recv_buffer (duk_context *ctx) {
+COMO_METHOD(como_sock_readIntoBuffer) {
     SOCKET fd  = duk_require_int(ctx, 0);
-    size_t len = (size_t)duk_require_int(ctx, 1);
-    int flags  = duk_get_int(ctx, 2);
-    
-    char *buf = duk_push_buffer(ctx, len, 1);
-    size_t n = recv(fd, buf, len, flags);
-    if (n == -1){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+
+    size_t len;
+    char *buf = duk_require_buffer(ctx, 1, &len);
+    int flags  = duk_get_int(ctx, 2); /* default to zero */
+
+    size_t nread;
+    do {
+        nread = recv(fd, buf, len, flags);
+    } while (nread < 0 && COMO_GET_LAST_WSA_ERROR == SOCKEINTR);
+
+    if (nread == -1){
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
+    } else if (nread == 0){
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMOEOF);
     }
-    //if (n == 0) COMO_SET_ERRNO_AND_RETURN(ctx, 4095);
-    if (n < len) duk_resize_buffer(ctx, -1, n);
-    //duk_to_fixed_buffer(ctx, -1, &n);
+
+    duk_push_number(ctx, (double)nread);
     return 1;
 }
 
 /*=============================================================================
   send (string/buffer)
  ============================================================================*/
-static const int como_sock_send (duk_context *ctx) {
+COMO_METHOD(como_sock_send) {
     SOCKET fd       = duk_require_int(ctx, 0);
+    const char *buf;
     size_t length;
-    const char *str = duk_get_lstring(ctx, 1, &length);
-    size_t len      = (size_t)duk_require_int(ctx, 2);
-    int flags       = duk_require_int(ctx, 3);
+    
+    if (duk_get_type(ctx, 1) == DUK_TYPE_BUFFER){
+        buf = duk_get_buffer(ctx, 1, &length);
+    } else {
+        buf = duk_get_lstring(ctx, 1, &length);
+    }
 
-    //do not allow to exceed string size when sending
+    size_t len      = (size_t)duk_require_int(ctx, 2);
+    int flags       = duk_get_int(ctx, 3);
+
+    /* do not allow to exceed string size when sending */
     if (len > length) len = length;
     
-    char *buf = duk_push_fixed_buffer(ctx, len);
-    size_t n = send(fd, str, len, flags);
+    size_t n;
+    do {
+        n = send(fd, buf, len, flags);
+    } while (n == -1 && errno == SOCKEINTR);
+
     if (n == -1){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
-    duk_push_int(ctx, (size_t)n);
+
+    duk_push_number(ctx, (double)n);
     return 1;
 }
 
@@ -615,97 +623,95 @@ static const int como_sock_send (duk_context *ctx) {
   to use TCP sockets
  ============================================================================*/
 #ifdef WIN32
-int dumb_socketpair(SOCKET socks[2], int make_overlapped)
-{
-    union {
-       struct sockaddr_in inaddr;
-       struct sockaddr addr;
-    } a;
-    SOCKET listener;
-    int e;
+    int dumb_socketpair(SOCKET socks[2], int make_overlapped) {
+        union {
+           struct sockaddr_in inaddr;
+           struct sockaddr addr;
+        } a;
+        SOCKET listener;
+        int e;
 
-    WSADATA wsaData = {0};
-    int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0) {
-        return SOCKET_ERROR;
-    }
+        WSADATA wsaData = {0};
+        int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (iResult != 0) {
+            return SOCKET_ERROR;
+        }
 
-    socklen_t addrlen = sizeof(a.inaddr);
-    DWORD flags = (make_overlapped ? WSA_FLAG_OVERLAPPED : 0);
-    int reuse = 1;
+        socklen_t addrlen = sizeof(a.inaddr);
+        DWORD flags = (make_overlapped ? WSA_FLAG_OVERLAPPED : 0);
+        int reuse = 1;
 
-    if (socks == 0) {
-      WSASetLastError(WSAEINVAL);
-      return SOCKET_ERROR;
-    }
-    socks[0] = socks[1] = INVALID_SOCKET;
+        if (socks == 0) {
+          WSASetLastError(WSAEINVAL);
+          return SOCKET_ERROR;
+        }
+        socks[0] = socks[1] = INVALID_SOCKET;
 
-    listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listener == INVALID_SOCKET)
-        return SOCKET_ERROR;
-
-    memset(&a, 0, sizeof(a));
-    a.inaddr.sin_family = AF_INET;
-    a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    a.inaddr.sin_port = 0;
-    
-    do {
-        if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
-               (char*) &reuse, (socklen_t) sizeof(reuse)) == -1)
-            break;
-        if  (bind(listener, &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
-            break;
+        listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (listener == INVALID_SOCKET)
+            return SOCKET_ERROR;
 
         memset(&a, 0, sizeof(a));
-        if  (getsockname(listener, &a.addr, &addrlen) == SOCKET_ERROR)
-            break;
-        // win32 getsockname may only set the port number, p=0.0005.
-        // ( http://msdn.microsoft.com/library/ms738543.aspx ):
-        a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         a.inaddr.sin_family = AF_INET;
+        a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        a.inaddr.sin_port = 0;
+        
+        do {
+            if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+                   (char*) &reuse, (socklen_t) sizeof(reuse)) == -1)
+                break;
+            if  (bind(listener, &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
+                break;
 
-        if (listen(listener, 1) == SOCKET_ERROR)
-            break;
+            memset(&a, 0, sizeof(a));
+            if  (getsockname(listener, &a.addr, &addrlen) == SOCKET_ERROR)
+                break;
+            // win32 getsockname may only set the port number, p=0.0005.
+            // ( http://msdn.microsoft.com/library/ms738543.aspx ):
+            a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            a.inaddr.sin_family = AF_INET;
 
-        socks[0] = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, flags);
-        if (socks[0] == INVALID_SOCKET)
-            break;
-        if (connect(socks[0], &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
-            break;
+            if (listen(listener, 1) == SOCKET_ERROR)
+                break;
 
-        socks[1] = accept(listener, NULL, NULL);
-        if (socks[1] == INVALID_SOCKET)
-            break;
+            socks[0] = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, flags);
+            if (socks[0] == INVALID_SOCKET)
+                break;
+            if (connect(socks[0], &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
+                break;
 
+            socks[1] = accept(listener, NULL, NULL);
+            if (socks[1] == INVALID_SOCKET)
+                break;
+
+            closesocket(listener);
+            return 0;
+        } while (0);
+
+        e = WSAGetLastError();
         closesocket(listener);
-        return 0;
-    } while (0);
-
-    e = WSAGetLastError();
-    closesocket(listener);
-    closesocket(socks[0]);
-    closesocket(socks[1]);
-    WSASetLastError(e);
-    socks[0] = socks[1] = INVALID_SOCKET;
-    return SOCKET_ERROR;
-}
-#else
-int dumb_socketpair(int socks[2], int dummy)
-{
-    (void) dummy;
-    if (socks == 0) {
-                //set_errno(EINVAL);
-                return -1;
+        closesocket(socks[0]);
+        closesocket(socks[1]);
+        WSASetLastError(e);
+        socks[0] = socks[1] = INVALID_SOCKET;
+        return SOCKET_ERROR;
     }
-    socks[0] = socks[1] = -1;
-    return socketpair(AF_LOCAL, SOCK_STREAM, 0, socks);
-}
+#else
+    int dumb_socketpair(int socks[2], int dummy) {
+        (void) dummy;
+        if (socks == 0) {
+                    //set_errno(EINVAL);
+                    return -1;
+        }
+        socks[0] = socks[1] = -1;
+        return socketpair(AF_LOCAL, SOCK_STREAM, 0, socks);
+    }
 #endif
 
-static const int como_sock_socketpair (duk_context *ctx) {
+COMO_METHOD(como_sock_socketpair) {
     SOCKET sockets[2];
     if (dumb_socketpair(sockets, 0) == SOCKET_ERROR){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
 
     duk_idx_t arr_idx = duk_push_array(ctx);
@@ -719,12 +725,12 @@ static const int como_sock_socketpair (duk_context *ctx) {
 /*=============================================================================
   shutdown
  ============================================================================*/
-static const int como_sock_shutdown (duk_context *ctx) {
+COMO_METHOD(como_sock_shutdown) {
     SOCKET s = duk_require_int(ctx, 0);
     int how  = duk_get_int(ctx, 1);
 
     if (shutdown(s, how) == SOCKET_ERROR){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     duk_push_true(ctx);
@@ -734,7 +740,7 @@ static const int como_sock_shutdown (duk_context *ctx) {
 /*=============================================================================
   close
  ============================================================================*/
-static const int como_sock_close(duk_context *ctx) {
+COMO_METHOD(como_sock_close) {
 
     if (!duk_is_number(ctx, 0)){
         COMO_SET_ERRNO_AND_RETURN(ctx, EINVAL);
@@ -750,7 +756,7 @@ static const int como_sock_close(duk_context *ctx) {
     #endif
     
     if (ret == SOCKET_ERROR){
-        COMO_SET_ERRNO_AND_RETURN(ctx, GetSockError);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
     
     duk_push_true(ctx);
@@ -758,7 +764,6 @@ static const int como_sock_close(duk_context *ctx) {
 }
 
 int hostname_to_ip(const char *hostname , const char *protocol, char *ip) {
-    int sockfd;  
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_in *h;
     int rv;
@@ -768,21 +773,20 @@ int hostname_to_ip(const char *hostname , const char *protocol, char *ip) {
     hints.ai_socktype = SOCK_STREAM;
  
     if ( (rv = getaddrinfo( hostname , protocol, &hints , &servinfo)) != 0) {
-        //fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return rv;
     }
 
-    // loop through all the results and connect to the first we can
+    /* loop through all the results and connect to the first we can */
     for(p = servinfo; p != NULL; p = p->ai_next) {
         h = (struct sockaddr_in *) p->ai_addr;
         strcpy(ip , inet_ntoa( h->sin_addr ) );
     }
 
-    freeaddrinfo(servinfo); // all done with this structure
+    freeaddrinfo(servinfo); /* all done with this structure */
     return 0;
 }
 
-static const int como_host_to_ip (duk_context *ctx) {
+COMO_METHOD(como_host_to_ip) {
     const char *hostname = duk_require_string(ctx, 0);
     const char *protocol = duk_require_string(ctx, 1);
     char ip[100];
@@ -827,7 +831,7 @@ static const duk_function_list_entry como_socket_funcs[] = {
     { "accept"         , como_sock_accept, 1 },
     { "nonblock"       , como_sock_nonblock, 2 },
     { "recv"           , como_sock_recv, 3},
-    { "recvBuffer"     , como_sock_recv_buffer, 3},
+    {"readIntoBuffer"  , como_sock_readIntoBuffer, 3},
     { "send"           , como_sock_send, 4},
     { "shutdown"       , como_sock_shutdown,2 },
     { "close"          , como_sock_close, 1 },
@@ -837,7 +841,7 @@ static const duk_function_list_entry como_socket_funcs[] = {
     { "isIP"           , como_sock_isIP, 1},
     { "family"         , como_sock_get_family, 1 },
     { "addr_info"      , como_sock_address_info, 1 },
-    { "socketpair"     ,  como_sock_socketpair, 0},
+    { "socketpair"     , como_sock_socketpair, 0},
     { NULL         , NULL, 0 }
 };
 
@@ -881,6 +885,10 @@ static const duk_number_list_entry como_socket_constants[] = {
     { "SO_REUSEADDR" , SO_REUSEADDR},
     { "SO_ERROR"     , SO_ERROR},
     
+    #ifdef SO_NOSIGPIPE
+    { "SO_NOSIGPIPE" , SO_NOSIGPIPE},
+    #endif
+    
     #ifdef SO_EXCLUSIVEADDRUSE
     { "SO_EXCLUSIVEADDRUSE", SO_EXCLUSIVEADDRUSE },
     #endif
@@ -889,6 +897,10 @@ static const duk_number_list_entry como_socket_constants[] = {
     { "SO_NOSIGPIPE", SO_NOSIGPIPE },
     #endif
     
+    #ifdef MSG_NOSIGNAL
+    { "MSG_NOSIGNAL", MSG_NOSIGNAL },
+    #endif
+
     //IPPROTO_TCP level
     {"IPPROTO_TCP"  , IPPROTO_TCP},
     { "TCP_NODELAY" , TCP_NODELAY },
@@ -929,7 +941,7 @@ static const duk_number_list_entry como_socket_constants[] = {
 /** 
   * socket function initiation
 ******************************************************************************/
-static const int init_binding_socket(duk_context *ctx) {
+static int init_binding_socket(duk_context *ctx) {
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, como_socket_funcs);
     duk_put_number_list(ctx, -1, como_socket_constants);

@@ -1,20 +1,22 @@
+/*  
+    this is a quick demo, for demonestration only  
+    you better off using io sockets or http module
+    to create servers
+*/
+
 var sock = process.binding('socket');
 var binding = process.binding('io');
-var loop = require('loop').default_loop;
-var Stream = require('stream');
-
-var stream = new Stream;
-stream.readable = true;
-
-
+var loop = process.binding('loop');
+var main_loop = process.main_loop;
 
 var httpParser = require('http_parser');
 var parser = new httpParser(httpParser.REQUEST);
 
-var html =  "HTTP/1.1 200 OK\r\n" +
-            "Content-Type: text/html; charset=utf-8\r\n" +
-            "Content-Length: 8\r\n\r\n" +
-            "Hi There";
+var html =    "HTTP/1.1 200 OK\n"
+        + "Content-Type: text/plain\n"
+        + "Date: Thu, 16 Jul 2015 21:34:58 GMT\n"
+        + "Connection: keep-alive\n\n"
+        + "Hello World";
 
 //create new socket
 var s = sock.socket(sock.AF_INET, sock.SOCK_STREAM, 0);
@@ -49,13 +51,13 @@ function sockcb (handle, mask) {
     if (!sock.nonblock(acceptSock, 1)){
         throw new Error("Error Setting Socket to nonblocking");
     }
-    
-    var cl = loop.io_start(acceptSock, loop.POLLIN, function(h, mask){
+
+    var handle = loop.handle_init(main_loop, function(h, mask){
 
         var raw = sock.recv(acceptSock, 1024);
         parser.reinitialize(httpParser.REQUEST);
         parser.parse(raw);
-        //console.log(parser);
+        // console.log(parser);
         
         print(i++);
 
@@ -65,14 +67,18 @@ function sockcb (handle, mask) {
             throw new Error("cant close");
         }
         
-        h.io_close();
+        loop.handle_close(h);
     });
+
+    loop.io_start(handle, acceptSock, loop.POLLIN);
 }
 
-var handle = loop.io_start(s, loop.POLLIN, sockcb);
-console.log("listening on port 9090");
+var handle = loop.handle_init(main_loop, sockcb);
+loop.io_start(handle, s, loop.POLLIN);
+
+console.log("listening on port 9090 XX");
 
 
-// setInterval(function(){
-//     print('running');
-// },1000);
+setInterval(function(){
+    // print('running');
+},10);

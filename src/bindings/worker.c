@@ -1,241 +1,289 @@
-#include "../queue.h"
-
-SIMPLEQ_HEAD(ComoInOut, comoWorkerJob);
-
-struct comoWorkerJob {
-    char *data;
-    SIMPLEQ_ENTRY(comoWorkerJob) entries;
-};
-
-typedef struct {
-    mtx_t mtx;
-    cnd_t cond;
-    int pool;
-    int total;
-    const char *file;
-    const char *arg;
-    evHandle *handle;
-    struct ComoInOut in;
-    struct ComoInOut out;
-} comoThreadQueue;
+#include "../loop/queue.h"
 
 typedef struct {
     mtx_t mtx;
     thrd_t t;
+    int destroy;
+    duk_context *Mainctx; /* main context */
     duk_context *ctx;
-    comoThreadQueue *queue;
+    char *file;
+    void *self;
+    void *queueIn[2];
+    void *queueOut[2];
 } comoWorker;
 
-/*=============================================================================
-  function which will run in threads, it will execute new created context, 
-  create new event loop and then pass everything to the javascript land
- ============================================================================*/
-int _como_thread_start (void *data) {
+typedef struct {
+    void *data;
+    duk_int_t type; /* data type */
+    void *queue[2];
+} comoQueue;
 
-    comoWorker *worker = data;
-    comoThreadQueue *queue = worker->queue;
-    duk_context *ctx = worker->ctx;
-    
-    /* stack => [function(){}] anon function from
-    child thread just to save thread & queue pointers */
-    como_run(ctx);
+void como_push_worker_value (duk_context *ctx, comoQueue *queue){
+    switch(queue->type){
+        case DUK_TYPE_UNDEFINED :
+            duk_push_undefined(ctx);
+            break;
 
-    duk_push_pointer(ctx, worker);
-    duk_push_pointer(ctx, queue);
+        case DUK_TYPE_NULL :
+                duk_push_null(ctx);
+                break;
 
-    /* this function will block in javascript land and will
-    not return unless we are done with this thread */
-    duk_call(ctx, 2);
-    evLoop *loop = duk_require_pointer(ctx, 0);
+        case DUK_TYPE_OBJECT :
+            duk_push_string(ctx, queue->data);
+            duk_json_decode(ctx, -1);
+            break;
 
-    /* free this thread */
+        case DUK_TYPE_POINTER :
+            duk_push_pointer(ctx, queue->data);
+            break;
 
-    int retval;
-    thrd_join(&worker->t, &retval);
-    
-    mtx_lock(&queue->mtx);
-    queue->total--;
-    if (queue->total == 0){
-        handle_unref(queue->handle);
+        case DUK_TYPE_STRING :
+            duk_push_string(ctx, queue->data);
+            break;
+        
+        default :
+            assert(0 && "Duk Type Error");
     }
-    mtx_unlock(&queue->mtx);
+}
 
-    free(loop->api);
-    free(loop);
-    free(worker);
-    duk_destroy_heap(ctx);
+int _como_worker_thread (void *data){
+    comoWorker *worker = data;
+    QUEUE *q;
+
+    if (worker->ctx == NULL){
+        char *argv[3];
+        int argc = 3;
+        const char *arg = "";
+        const char *prefix = "--childWorker";
+
+        argv[0] = (char *)arg;
+        argv[1] = worker->file;
+        argv[2] = (char *)prefix;
+
+        duk_context *ctx = como_create_new_heap (argc, argv, NULL);
+        worker->ctx = ctx;
+        como_run(ctx);
+    }
+
+    while (1){
+        
+        como_sleep(1);
+        while ( !QUEUE_EMPTY(&worker->queueIn) ){
+            mtx_lock(&worker->mtx);
+            q = QUEUE_HEAD(&(worker)->queueIn);
+            QUEUE_REMOVE(q);
+            comoQueue *queue = QUEUE_DATA(q, comoQueue, queue);
+            mtx_unlock(&worker->mtx);
+
+            if (worker->destroy != 0){
+                goto FREE;
+            }
+
+            como_push_worker_value(worker->ctx, queue);
+
+            duk_push_pointer(worker->ctx, worker);
+            duk_call(worker->ctx, 2);
+            
+            FREE :
+            if (queue->data != NULL && queue->type != DUK_TYPE_POINTER){
+                free(queue->data);
+            }
+
+            free(queue);
+        }
+        
+        //call this to run event loop only
+        duk_call(worker->ctx, 0);
+        
+        if (worker->destroy == 1){
+            worker->destroy = 2; /* pass destruction to main thread */
+            
+            duk_push_global_object(worker->ctx);
+            duk_get_prop_string(worker->ctx, -1, "process");
+            duk_get_prop_string(worker->ctx, -1, "_emitExit");
+            // dump_stack(worker->ctx, "PP");
+            duk_call(worker->ctx, 0);
+            break;
+        }
+    }
+
+    duk_destroy_heap(worker->ctx);
     return 0;
 }
 
-/*=============================================================================
-  initialize a queue for the worker, this queue will be shared with the pool
-  of workers created
- ============================================================================*/
-void como_worker_create(comoThreadQueue *queue) {
-    
-    const char *file       = queue->file;
-    const char *arg        = queue->arg;
+static int _worker_dispatch_cb (evHandle *handle){
+    comoWorker *worker = handle->data;
+    duk_context *ctx = worker->Mainctx;
 
-    char *argv[3];
-    int argc = 3;
+    mtx_lock(&worker->mtx);
+    QUEUE *q;
+    while ( !QUEUE_EMPTY(&worker->queueOut) ){
 
-    argv[0] = (char *)arg;
-    argv[1] = (char *)file;
-    argv[2] = "--childWorker";
+        q = QUEUE_HEAD(&(worker)->queueOut);
+        QUEUE_REMOVE(q);
+        comoQueue *queue = QUEUE_DATA(q, comoQueue, queue);
+
+        if (worker->destroy != 0){
+            goto FREE;
+        }
+
+        duk_push_heapptr(ctx, worker->self);
+        
+        if (duk_get_type(ctx, -1) != DUK_TYPE_OBJECT){
+            dump_stack(ctx, "DUK");
+            assert(0);
+        }
+
+        como_push_worker_value(ctx, queue);
+
+        duk_call(ctx, 1);
+        duk_pop(ctx);
+
+        FREE :
+        /* free except in case of pointers */
+        if (queue->data != NULL && queue->type != DUK_TYPE_POINTER){
+            free(queue->data);
+        }
+
+        free(queue);
+    }
+    mtx_unlock(&worker->mtx);
+
+    if (worker->destroy == 2){
+        
+        duk_push_global_stash(ctx);
+        duk_get_prop_string(ctx, -1, "comoWorkersCallBack");
+        duk_push_number(ctx, (double) handle->id);
+        duk_del_prop(ctx, -2);
+
+        handle_close(handle);
+        free(worker);
+    }
+
+    return 0;
+}
+
+COMO_METHOD(como_worker_init) {
+
+    evLoop *loop     = duk_require_pointer(ctx, 0);
+    const char *file = duk_require_string(ctx, 1);
+    void *self       = duk_require_heapptr(ctx, 2);
     
+
     comoWorker *worker = malloc(sizeof(*worker));
     memset(worker, 0, sizeof(*worker));
-    worker->queue = queue;
+    QUEUE_INIT(&worker->queueIn);
+    QUEUE_INIT(&worker->queueOut);
 
-    duk_context *ctx = como_create_new_heap (argc, argv);
-    worker->ctx = ctx;
+    worker->Mainctx = ctx;
+    worker->self = self;
+    worker->file = (char *)file;
+    worker->destroy = 0;
 
-    /* lock => will be unlocked from thread
-    just after everything in place */
+    evHandle *handle  = handle_init(loop, _worker_dispatch_cb);
+    handle->data = worker;
     
-    if (thrd_create(&worker->t, _como_thread_start, (void *)worker) != thrd_success){
+    /* save callback reference in global stash */
+    int64_t handle_id = handle->id;
+    duk_push_global_stash(ctx);
+    duk_get_prop_string(ctx, -1, "comoWorkersCallBack");
+    duk_push_number(ctx, (double) handle_id);
+    duk_dup(ctx, 2);
+    duk_put_prop(ctx, -3); /* comoHandles[handle_id] = callback */
+
+    mtx_init(&worker->mtx, mtx_plain);
+    
+    if (thrd_create(&worker->t, _como_worker_thread, (void *)worker) != thrd_success){
         COMO_FATAL_ERROR("Can't Create New Thread");
     }
-
-    como_sleep(100);
+    
+    timer_start(handle, 1, 1);
+    duk_push_pointer(ctx, worker);
     return 1;
 }
 
-/*=============================================================================
-  this thread is created for the sole purpose to manage other threads pool
+comoQueue *como_duk_val_to_queue (duk_context *ctx, duk_idx_t index) {
 
-  since duktape requires a seperate context for each thread, initializing new
-  context with all globals and event loop is kinda expensive so we need to 
-  create it within a thread to avoid main thread lagging
- ============================================================================*/
-int _como_worker_manager (void *data) {
+    const char *string = NULL;
 
-    comoThreadQueue *queue = data;
-    
-    while(1){
-        mtx_lock(&queue->mtx);
-        if (queue->pool > queue->total && !SIMPLEQ_EMPTY(&queue->in)){
-            queue->total++;
-            mtx_unlock(&queue->mtx);
-            como_worker_create(queue);
-            continue;
-        } else {
-            cnd_wait(&queue->cond, &queue->mtx);
-        }
-        mtx_unlock(&queue->mtx);
-    }
-
-    return 0;
-}
-
-/*=============================================================================
-  initialize a queue for the worker, this queue will be shared with the pool
-  of workers created
- ============================================================================*/
-static const int como_worker_queue(duk_context *ctx) {
-
-    const char *file       = duk_require_string(ctx, 0);
-    const char *arg        = duk_require_string(ctx, 1);
-    int pool               = duk_require_int(ctx, 2);
-    evHandle *handle       = duk_require_pointer(ctx, 3);
-
-    comoThreadQueue *queue = malloc(sizeof(*queue));
+    comoQueue *queue = malloc(sizeof(*queue));
     memset(queue, 0, sizeof(*queue));
+    QUEUE_INIT(&queue->queue);
 
-    SIMPLEQ_INIT(&queue->in);
-    SIMPLEQ_INIT(&queue->out);
-    
-    cnd_init(&queue->cond);
-    mtx_init(&queue->mtx, mtx_plain);
+    queue->type = duk_get_type(ctx, index);
+    queue->data = NULL;
 
-    queue->file  = file;
-    queue->arg   = arg;
-    queue->pool  = pool;
-    queue->total = 0;
-    queue->handle = handle;
-    handle_unref(queue->handle);
+    switch(queue->type){
+        case DUK_TYPE_UNDEFINED :
+        case DUK_TYPE_NULL :
+            break;
 
-    thrd_t t;
-    if (thrd_create(&t, _como_worker_manager, (void *)queue) != thrd_success){
-        COMO_FATAL_ERROR("Can't Create New Thread");
+        case DUK_TYPE_NUMBER :
+            COMO_FATAL_ERROR("NUMBERS SUPPORT IN PROGRESS");
+            break;
+
+        case DUK_TYPE_OBJECT :
+            string = duk_json_encode(ctx, index);
+            break;
+
+        case DUK_TYPE_POINTER :
+            queue->data = duk_get_pointer(ctx, index);
+            break;
+
+        case DUK_TYPE_STRING :
+            string = duk_get_string(ctx, index);
+            break;
     }
-    
-    duk_push_pointer(ctx, queue);
+
+    if (string != NULL){
+        queue->data = malloc( strlen(string) + 1);
+        strcpy(queue->data, (char *)string);
+    }
+
+    return queue;
+}
+
+COMO_METHOD(como_post_message_to_child) {
+    comoWorker *worker = duk_require_pointer(ctx, 0);
+    comoQueue *queue   = como_duk_val_to_queue(ctx, 1);
+
+    QUEUE_INSERT_TAIL(&worker->queueIn, 
+                      &queue->queue);
+
     return 1;
 }
 
-/*=============================================================================
-  push message from and to worker, will be used when calling 
-  w.postMessage()
-
-  this function will be called from both worker and main thread
- ============================================================================*/
-static const int como_worker_post_message(duk_context *ctx) {
-
-    size_t size, i;
-    const char *data        = duk_require_lstring(ctx, 0, &size);
-    comoThreadQueue *queue  = duk_require_pointer(ctx, 1);
-    int isWorker            = duk_get_int(ctx, 2);
-
-    struct comoWorkerJob *job = malloc(sizeof(*job));
-    memset(job, 0, sizeof(*job));
-
-    job->data = malloc(size+1);
-    for (i = 0; i < size+1; i++){
-        job->data[i] = data[i];
-    }
-
-    mtx_lock(&queue->mtx);
-    if (isWorker){
-        SIMPLEQ_INSERT_TAIL(&queue->out, job, entries);
-    } else {
-        handle_ref(queue->handle);
-        SIMPLEQ_INSERT_TAIL(&queue->in, job, entries);
-        cnd_broadcast(&queue->cond);
-    }
-    mtx_unlock(&queue->mtx);
-    duk_pop_n(ctx, 3);
+COMO_METHOD(como_post_message_to_parent) {
+    comoWorker *worker = duk_require_pointer(ctx, 0);
+    comoQueue *queue   = como_duk_val_to_queue(ctx, 1);
+    
+    mtx_lock(&worker->mtx);
+    QUEUE_INSERT_TAIL(&worker->queueOut, 
+                      &queue->queue);
+    mtx_unlock(&worker->mtx);
     return 1;
 }
 
-/*=============================================================================
-  work submit and work done watcher, for both worker and main thread
- ============================================================================*/
-static const int como_worker_watcher(duk_context *ctx) {
-    
-    comoThreadQueue *queue = duk_require_pointer(ctx, 0);
-    int isWorker           = duk_get_int(ctx, 1);
-    
-    struct ComoInOut *inout;
-    
-    if (isWorker){
-        inout = &queue->in;
-    } else {
-        inout = &queue->out;
-    }
-
-    mtx_lock(&queue->mtx);
-    if (!SIMPLEQ_EMPTY(inout)){
-        struct comoWorkerJob *job = SIMPLEQ_FIRST(inout);
-        SIMPLEQ_REMOVE_HEAD(inout, entries);
-        duk_push_string(ctx, job->data);
-        free(job->data);
-        free(job);
-    } else {
-        duk_push_null(ctx);
-    }
-    mtx_unlock(&queue->mtx);
+COMO_METHOD(como_destroy_worker) {
+    comoWorker *worker = duk_require_pointer(ctx, 0);
+    worker->destroy = duk_require_int(ctx, 1);
     return 1;
 }
 
 static const duk_function_list_entry como_worker_funcs[] = {
-    { "queue_init"   , como_worker_queue ,        4 },
-    { "post_message" , como_worker_post_message,  3 },
-    { "watcher"      , como_worker_watcher,       2 },
-    { NULL           , NULL, 0 }
+    { "init",               como_worker_init ,            3 },
+    { "postMessageToChild",  como_post_message_to_child,  2 },
+    { "postMessageToParent", como_post_message_to_parent, 2 },
+    { "destroyWorker",       como_destroy_worker,         2 },
+    { NULL,                 NULL,                         0 }
 };
 
-static const int init_binding_worker(duk_context *ctx) {
+static int init_binding_worker(duk_context *ctx) {
+    duk_push_global_stash(ctx);
+    duk_push_object(ctx);
+    duk_put_prop_string(ctx, -2, "comoWorkersCallBack");
+    duk_pop(ctx);
+
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, como_worker_funcs);
     return 1;

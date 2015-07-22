@@ -39,8 +39,8 @@ int io_remove (evHandle* handle, int mask) {
     assert(handle->ev != NULL);
 
     evLoop *loop = handle->loop;
-    evAPI *api   = loop->api;
-    evIO *io     = handle->ev;
+    evAPI  *api  = loop->api;
+    evIO   *io   = handle->ev;
 
     assert(io->fd > -1);
 
@@ -63,8 +63,10 @@ int io_remove (evHandle* handle, int mask) {
 }
 
 int io_start (evHandle* handle, int fd, int mask){
+    assert(handle != NULL);
+    if (handle->flags & HANDLE_CLOSING) return 0;
     if (_is_active(handle)) return io_add(handle, mask);
-    
+
     evIO *io = malloc(sizeof(*io));
     memset(io, 0, sizeof(*io));
 
@@ -87,13 +89,15 @@ int io_start (evHandle* handle, int fd, int mask){
 }
 
 int io_stop (evHandle* handle, int mask){
-    
+    // if (handle->flags & HANDLE_CLOSING) return 0;
     if (!_is_active(handle)) return 0;
+
     assert(handle->ev != NULL);
     evIO *io = handle->ev;
     io_remove(handle, mask);
     
     if (!io->mask){
+        handle->flags |= HANDLE_CLOSING;
         handle_stop(handle);
         QUEUE_REMOVE(&io->queue);
         QUEUE_INSERT_TAIL(&handle->loop->closing_queue, 
@@ -101,6 +105,10 @@ int io_stop (evHandle* handle, int mask){
     }
     
     return 0;
+}
+
+int io_close (evHandle* handle) {
+    return io_stop(handle, EV_POLLOUT | EV_POLLIN | EV_POLLERR);
 }
 
 static int loop_poll_create(evLoop *loop) {
@@ -116,81 +124,74 @@ static int loop_poll_create(evLoop *loop) {
 static void io_poll (evLoop *loop, int timeout) {
     
     evAPI *api = loop->api;
-    int retval, j, numevents = 0;
-    uint64_t base;
-    uint64_t diff;
-    base = loop->time;
+    int retval = 0;
 
-    POLLAGAIN : {
+    memcpy(&api->_rfds,&api->rfds,sizeof(fd_set));
+    memcpy(&api->_wfds,&api->wfds,sizeof(fd_set));
+    memcpy(&api->_efds,&api->efds,sizeof(fd_set));
 
-        memcpy(&api->_rfds,&api->rfds,sizeof(fd_set));
-        memcpy(&api->_wfds,&api->wfds,sizeof(fd_set));
-        memcpy(&api->_efds,&api->efds,sizeof(fd_set));
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = timeout * 1000;
+    errno = 0;
 
-        struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = timeout*1000;
-        errno = 0;
+    /* FIXME: add a max fd value to io struct */
+    retval = select(1024, &api->_rfds, &api->_wfds, &api->_efds,
+                     timeout == -1 ? NULL : &tv);
+    
+    #ifdef _WIN32
+        errno = WSAGetLastError();
+    #endif
 
-        /* FIXME: add a max fd value to io struct */
-        retval = select(1024, &api->_rfds, &api->_wfds, &api->_efds,
-                         timeout == -1 ? NULL : &tv);
-        
-        #ifdef _WIN32
-            errno = WSAGetLastError();
-        #endif
+    if (retval > 0){
+        QUEUE *q;
+        int nevents = 0;
+        QUEUE_FOREACH(q, &loop->io_queue) {
+            
+            assert( q != NULL );
+            evIO *io = QUEUE_DATA(q, evIO, queue);
+            assert(io != NULL);
 
-        if (retval > 0){
-            QUEUE *q;
-            int nevents = 0;
-            QUEUE_FOREACH(q, &loop->io_queue) {
-                
-                assert( q != NULL );
-                evIO *io = QUEUE_DATA(q, evIO, queue);
-                assert(io != NULL);
+            int mask = 0;
+            if (io->mask & EV_POLLIN && FD_ISSET(io->fd, &api->_rfds)) {
+                mask |= EV_POLLIN;
+            }
 
-                int mask = 0;
-                if (io->mask & EV_POLLIN && FD_ISSET(io->fd, &api->_rfds)) {
-                    mask |= EV_POLLIN;
+            if (io->mask & EV_POLLOUT && FD_ISSET(io->fd, &api->_wfds)) {
+                mask |= EV_POLLOUT;
+            }
+
+            if (io->mask & EV_POLLERR && FD_ISSET(io->fd, &api->_efds)) {
+                mask |= EV_POLLERR;
+            }
+            
+            if (mask != 0){
+                if (io->handle->cb != NULL) {
+                    io->handle->cb(io->handle, mask);
                 }
-
-                if (io->mask & EV_POLLOUT && FD_ISSET(io->fd, &api->_wfds)) {
-                    mask |= EV_POLLOUT;
-                }
-
-                if (io->mask & EV_POLLERR && FD_ISSET(io->fd, &api->_efds)) {
-                    mask |= EV_POLLERR;
-                }
-                
-                if (mask != 0){
-                    if (io->handle->cb != NULL) {
-                        io->handle->cb(io->handle, mask);
-                    }
-                    nevents++;
-                }
-                
-                /* break once we match number of events */
-                if (nevents == retval){
-                    break;
-                }
+                nevents++;
+            }
+            
+            /* break once we match number of events */
+            if (nevents == retval){
+                break;
             }
         }
     }
     
     if (retval == -1){
         /*
-            on windows we may get an EINVAL error if we have all fd sets nulled
-            this is an odd behaviour so we need to overcome a loop saturation 
+         on windows we may get an EINVAL error if we have all fd sets nulled
+         this is an odd behaviour so we need to overcome a loop saturation 
         */
-        
         #ifdef _WIN32
             if (errno == WSAEINVAL){
                 Sleep(1);
                 return;
             }
         #endif
-        //printf("SELECT ERROR : %i\n", WSAGetLastError());
-        //assert(0);
+
+        assert(0 && "select error");
         return;
     }
     
