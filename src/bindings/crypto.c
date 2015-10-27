@@ -4,63 +4,63 @@
 #include "mbedtls/sha512.h"
 
 COMO_METHOD(como_crypto_md5) {
-	size_t length;
-	const char *str = duk_require_lstring(ctx, 0, &length);
-	unsigned char digest[16];
-	char out[20];
-	mbedtls_md5( (unsigned char *) str, length, digest );
-	int i;
-	for( i = 0; i < 16; i++ ) {
-		sprintf(out+i*2, "%02x", digest[i]);
-	}
+    size_t length;
+    const char *str = duk_require_lstring(ctx, 0, &length);
+    unsigned char digest[16];
+    char out[20];
+    mbedtls_md5( (unsigned char *) str, length, digest );
+    int i;
+    for( i = 0; i < 16; i++ ) {
+        sprintf(out+i*2, "%02x", digest[i]);
+    }
 
-	duk_push_string(ctx, (const char *)out);
-	return 1;
+    duk_push_string(ctx, (const char *)out);
+    return 1;
 }
 
 COMO_METHOD(como_crypto_sha1) {
-	size_t length;
-	const char *str = duk_require_lstring(ctx, 0, &length);
-	unsigned char digest[20];
-	char out[20];
+    size_t length;
+    const char *str = duk_require_lstring(ctx, 0, &length);
+    unsigned char digest[20];
+    char out[20];
 
-	mbedtls_sha1( (unsigned char *) str, length, digest );
-	int i;
-	for( i = 0; i < 20; i++ ) {
-		sprintf(out+i*2, "%02x", digest[i]);
-	}
-	duk_push_string(ctx, (const char *)out);
-	return 1;
+    mbedtls_sha1( (unsigned char *) str, length, digest );
+    int i;
+    for( i = 0; i < 20; i++ ) {
+        sprintf(out+i*2, "%02x", digest[i]);
+    }
+    duk_push_string(ctx, (const char *)out);
+    return 1;
 }
 
 COMO_METHOD(como_crypto_sha256) {
-	size_t length;
-	const char *str = duk_require_lstring(ctx, 0, &length);
-	unsigned char digest[32];
-	char out[32];
+    size_t length;
+    const char *str = duk_require_lstring(ctx, 0, &length);
+    unsigned char digest[32];
+    char out[32];
 
-	mbedtls_sha256( (unsigned char *) str, length, digest, 0);
-	int i;
-	for( i = 0; i < 32; i++ ) {
-		sprintf(out+i*2, "%02x", digest[i]);
-	}
-	duk_push_string(ctx, (const char *)out);
-	return 1;
+    mbedtls_sha256( (unsigned char *) str, length, digest, 0);
+    int i;
+    for( i = 0; i < 32; i++ ) {
+        sprintf(out+i*2, "%02x", digest[i]);
+    }
+    duk_push_string(ctx, (const char *)out);
+    return 1;
 }
 
 COMO_METHOD(como_crypto_sha512) {
-	size_t length;
-	const char *str = duk_require_lstring(ctx, 0, &length);
-	unsigned char digest[64];
-	char out[64];
+    size_t length;
+    const char *str = duk_require_lstring(ctx, 0, &length);
+    unsigned char digest[64];
+    char out[64];
 
-	mbedtls_sha512( (unsigned char *) str, length, digest, 0);
-	int i;
-	for( i = 0; i < 64; i++ ) {
-		sprintf(out+i*2, "%02x", digest[i]);
-	}
-	duk_push_string(ctx, (const char *)out);
-	return 1;
+    mbedtls_sha512( (unsigned char *) str, length, digest, 0);
+    int i;
+    for( i = 0; i < 64; i++ ) {
+        sprintf(out+i*2, "%02x", digest[i]);
+    }
+    duk_push_string(ctx, (const char *)out);
+    return 1;
 }
 
 static const duk_function_list_entry como_crypto_funcs[] = {
