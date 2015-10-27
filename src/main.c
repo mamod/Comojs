@@ -14,7 +14,6 @@ extern char **environ;
 
 /* ALL Bindings ar directly included from main.h */
 static const duk_function_list_entry bindings_funcs[] = {
-    { "coro"        , init_binding_coro,      0 },
     { "worker"      , init_binding_worker,    0 },
     { "buffer"      , init_binding_buffer,    0 },
     { "loop"        , init_binding_loop,      0 },

@@ -121,7 +121,6 @@ void como_sleep (int timeout){
 /* BINDINGS */
 #include "bindings/errno.c"
 #include "bindings/loop.c"
-#include "bindings/coro.c"
 #include "bindings/buffer.c"
 #include "bindings/socket.c"
 #include "bindings/io.c"
