@@ -233,10 +233,7 @@ const duk_function_list_entry process_funcs[] = {
     { NULL, NULL, 0 }
 };
 
-duk_context *como_create_new_heap (int argc, char *argv[], void *error_handle) {
-
-    duk_context *ctx = duk_create_heap(NULL, NULL, NULL, NULL, error_handle);
-
+void como_init_process(int argc, char *argv[], duk_context *ctx) {
     duk_push_global_object(ctx);
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, process_funcs);
@@ -274,7 +271,11 @@ duk_context *como_create_new_heap (int argc, char *argv[], void *error_handle) {
     duk_push_object(ctx);
     duk_put_prop_string(ctx, -2, "modules");
     duk_pop(ctx);
+}
 
+duk_context *como_create_new_heap (int argc, char *argv[], void *error_handle) {
+    duk_context *ctx = duk_create_heap(NULL, NULL, NULL, NULL, error_handle);
+    como_init_process(argc, argv, ctx);
     return ctx;
 }
 
