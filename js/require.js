@@ -184,6 +184,9 @@ Module._extensions['.como'] = function(module, filename) {
 
 /* for perl module */
 Module._extensions['.pl'] = function(module, filename) {
+    if (module.parent){
+        module.parent.children = [];
+    }
     var ret = process.perl.require(module, filename);
     module.exports = ret;
 };
