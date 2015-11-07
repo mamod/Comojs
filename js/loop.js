@@ -36,3 +36,8 @@ IOHandle.prototype.remove = function(events){
 exports.io = function(cb){
 	return new IOHandle(cb);
 };
+
+exports.setTimeout = setTimeout;
+exports.setInterval = setInterval;
+exports.clearInterval = clearInterval;
+exports.clearTimeout = clearTimeout;
