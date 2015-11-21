@@ -126,6 +126,7 @@ int timer_start (evHandle *handle,
     if (!handle->type) {
         timer = malloc(sizeof(*timer));
     } else {
+        assert(handle->type == EV_TIMER && "starting timer on io handle");
         timer = handle->ev;
     }
 
@@ -169,7 +170,7 @@ int timer_again(evHandle *handle) {
     timer_stop(handle);
     if (handle->cb == NULL) return 0;
     evTimer *timer = handle->ev;
-    if (timer->repeat) {
+    if (timer->repeat && timer->repeat != -1) {
         timer_start(handle, timer->repeat, timer->repeat);
     }
     return 0;
@@ -209,12 +210,11 @@ static void loop_run_timers(evLoop *loop) {
         
         timer_again(timer->handle);
         timer->handle->cb(timer->handle);
-        if (!timer->repeat || timer->repeat == 0) {
+        if (!timer->repeat) {
             timer_close(timer->handle);
         }
     }
 }
-
 
 #ifdef _WIN32
     static double hrtime_interval_ = 0;
@@ -295,22 +295,25 @@ static void _free_handle(evHandle *handle) {
     handle = NULL;
 }
 
+void loop_run_closing_handles(evLoop *loop){
+    QUEUE *q;
+    evHandle *handle;
+    while ( !QUEUE_EMPTY(&loop->closing_queue) ){
+        q = QUEUE_HEAD(&(loop)->closing_queue);
+        QUEUE_REMOVE(q);
+        handle = QUEUE_DATA(q, evHandle, queue);
+        assert(handle);
+        if (handle->close != NULL){
+            handle->close(handle);
+        }
+        _free_handle(handle);
+    }
+}
+
 int loop_start (evLoop *loop, int type){
     while (loop->active_handles){
         /* closing handles */
-        QUEUE *q;
-        evHandle *handle;
-        while ( !QUEUE_EMPTY(&loop->closing_queue) ){
-            q = QUEUE_HEAD(&(loop)->closing_queue);
-            QUEUE_REMOVE(q);
-            handle = QUEUE_DATA(q, evHandle, queue);
-            assert(handle);
-            if (handle->close != NULL){
-                handle->close(handle);
-            } 
-            _free_handle(handle);
-        }
-
+        loop_run_closing_handles(loop);
         loop_update_time(loop);
         
         int timeout;
@@ -337,5 +340,7 @@ int loop_start (evLoop *loop, int type){
         if (type == 1){ break; }
     }
 
+    /* check closing handles one last time*/
+    loop_run_closing_handles(loop);
     return loop->active_handles > 0;
 }
