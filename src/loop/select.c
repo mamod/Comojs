@@ -33,9 +33,8 @@ int io_add (evHandle* handle, int mask) {
 }
 
 int io_remove (evHandle* handle, int mask) {
-    assert(handle && handle->type == EV_IO);
     if (!_is_active(handle)) return 0;
-
+    assert(handle && handle->type == EV_IO);
     assert(handle->ev != NULL);
 
     evLoop *loop = handle->loop;
@@ -191,12 +190,35 @@ static void io_poll (evLoop *loop, int timeout) {
             }
         #endif
 
-        assert(0 && "select error");
-        return;
-    }
-    
-    if (QUEUE_EMPTY(&loop->io_queue) || timeout == 0){
-        return;
+        //this really should never happen
+        QUEUE *q;
+        QUEUE_FOREACH(q, &loop->io_queue) {
+            retval = 0;
+
+            evIO *io = QUEUE_DATA(q, evIO, queue);
+            assert(io != NULL);
+            evHandle *handle = io->handle;
+
+            if (handle->flags & HANDLE_CLOSING){
+                continue;
+            }
+
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(io->fd, &fds);
+            
+            struct timeval tv;
+            tv.tv_sec = 0;
+            tv.tv_usec = 1 * 1000;
+            
+            retval = select(io->fd+1, NULL, NULL, &fds, &tv);
+            if (retval == -1) {
+                //should we call callback function here
+                //with an error and let user close the 
+                //handle manually?!
+                io_close(io->handle);
+            }
+        }
     }
     
     return;

@@ -3,6 +3,8 @@
 #ifdef _WIN32
     #include "../../include/ansi/ANSI.h"
     #include <io.h>
+    #include <conio.h>
+    #include <Windows.h>
     /* initaite critical section for console see ANSI.c */
     #define COMO_INIT_CONSOLE tty_console_init()
 #else
@@ -33,6 +35,7 @@
 
         return 0;
     }
+    
 #else
 
     #include <termios.h>
@@ -105,11 +108,11 @@ COMO_METHOD(como_tty_getWindowSize) {
     if (getWindowSize(&ws, fd)){
         duk_idx_t obj_idx = duk_push_object(ctx);
         
-        duk_push_string(ctx, "col");
+        duk_push_string(ctx, "width");
         duk_push_int(ctx, ws.ws_col);
         duk_put_prop(ctx, obj_idx);
         
-        duk_push_string(ctx, "row");
+        duk_push_string(ctx, "height");
         duk_push_int(ctx, ws.ws_row);
         duk_put_prop(ctx, obj_idx);
 
@@ -120,15 +123,44 @@ COMO_METHOD(como_tty_getWindowSize) {
         // duk_push_string(ctx, "height");
         // duk_push_int(ctx, ws.ws_ypixel);
         // duk_put_prop(ctx, obj_idx);
+    } else {
+        COMO_SET_ERRNO_AND_RETURN(ctx, errno);
     }
 
+    return 1;
+}
+
+COMO_METHOD(como_tty_guess_type) {
+    int fd = duk_require_int(ctx, 0);
+    if (_isatty(fd)){
+        duk_push_string(ctx, "TTY");
+    } else {
+        assert(0 && "tty unknown handle");
+        duk_push_string(ctx, "Unknown");
+    }
+    return 1;
+}
+
+COMO_METHOD(como_tty_kbhit) {
+    return 1;
+}
+
+COMO_METHOD(como_tty_set_mode) {
+    return 1;
+}
+
+COMO_METHOD(como_tty_read) {
     return 1;
 }
 
 static const duk_function_list_entry tty_funcs[] = {
     { "write"           , como_tty_write,          2 },
     { "istty"           , como_tty_isatty,         1 },
+    { "guessHandleType" , como_tty_guess_type,     1 },
     { "getWindowSize"   , como_tty_getWindowSize , 1 },
+    { "kbhit"           , como_tty_kbhit,          0 },
+    { "read"            , como_tty_read,           0 },
+    { "setRawMode"      , como_tty_set_mode,       0 },
     { NULL              , NULL, 0 }
 };
 

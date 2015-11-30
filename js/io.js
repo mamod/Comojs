@@ -3,7 +3,7 @@ exports.EOF = errno.EOF;
 
 //io socket
 exports.Socket  = require('./io/Socket.js');
-exports.Socket2 = require('./io/Socket2.js');
+exports.Socket2  = require('./io/Socket2.js');
 
 // ErrShortWrite means that a write accepted fewer bytes than requested
 // but failed to return an explicit error.

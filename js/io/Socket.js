@@ -75,7 +75,6 @@ Socket.prototype.server_io = function(){
         this.connection_cb();
         if (this.accepted_fd != -1) {
             throw new Error("user hasn't call this.accept");
-            return;
         }
     }
 };
@@ -83,7 +82,7 @@ Socket.prototype.server_io = function(){
 
 Socket.prototype.stream_io = function(events){
     if (events === loop.POLLERR){
-        throw("poll error");
+        throw new Error("poll error");
     }
 
     if (this.connection_cb){
@@ -233,7 +232,9 @@ Socket.prototype.bind = function(ip, port){
         throw new Error("error " + process.errno);
     }
 
-    sock.bind(this.fd, this.addr);
+    if (!sock.bind(this.fd, this.addr)){
+        throw new Error("can't bind IP address " + this.ip + " errno: " + process.errno);
+    }
 };
 
 Socket.prototype.listen = function(backlog, cb){

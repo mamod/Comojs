@@ -1,7 +1,7 @@
 #ifndef _COMO_ERRNO_H
 #define _COMO_ERRNO_H
 
-#define COMOEOF -4048
+#define COMOEOF -4095
 
 #if !defined(EADDRINUSE) && defined(_WIN32)
 # define EADDRINUSE WSAEADDRINUSE
@@ -65,6 +65,10 @@
 
 #if !defined(ENOBUFS) && defined(_WIN32)
 #define ENOBUFS WSAENOBUFS
+#endif
+
+#if !defined(ENOTCONN) && defined(_WIN32)
+# define ENOTCONN  WSAENOTCONN
 #endif
 
 #ifdef _WIN32

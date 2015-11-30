@@ -35,6 +35,8 @@ static const duk_number_list_entry errno_constants[] = {
     { "EINTR"              , EINTR},
     { "EPIPE"              , EPIPE},
     { "EOF"                , COMOEOF},
+    { "EBUSY"              , EBUSY},
+    { "ENOTCONN"           , ENOTCONN},
     #ifdef WSAEINVAL
     { "WSAEINVAL"          , WSAEINVAL},
     #endif

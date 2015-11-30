@@ -1,5 +1,12 @@
 this.global = this;
 
+global.DTRACE_NET_SERVER_CONNECTION = function(){};
+global.LTTNG_NET_SERVER_CONNECTION  = function(){};
+global.COUNTER_NET_SERVER_CONNECTION = function(){};
+global.COUNTER_NET_SERVER_CONNECTION_CLOSE = function(){};
+global.DTRACE_NET_STREAM_END = function(){};
+global.LTTNG_NET_STREAM_END = function(){};
+
 //definegetter polufill
 if (typeof Object.prototype.__defineGetter__ === 'undefined') {
     Object.defineProperty(Object.prototype, '__defineGetter__', {
@@ -35,13 +42,15 @@ if (typeof Number.isFinite !== 'function') {
     };
 
     process.reportError = function (e){
-        console.log(e.stack || e);
+        print(e.stack || e);
         process.exit(1);
     };
     
-    process.nextTick = function (fn){
-        setTimeout(fn,0);
-    }
+    process.nextTick = function (fn, a, b, c, d){
+        setTimeout(function(){
+            fn(a, b, c, d);
+        }, 1);
+    };
     
     process.moduleLoadList = [];
     var binding_modules = process.bindings;
@@ -50,10 +59,9 @@ if (typeof Number.isFinite !== 'function') {
     var cached_bindings = {};
     var wrap_test       = /wrap/i;
     process.binding = function (name){
-        
         if ( wrap_test.test(name) || name === 'uv' ){
             var r = NativeModule.require('module');
-            return r.require('js/node/Wrap/' + name + '.js');
+            return r.require('js/node/wrap/' + name + '.js');
         } else if (name === 'http_parser'){
             return NativeModule.require('http_parser');
         }
@@ -70,7 +78,7 @@ if (typeof Number.isFinite !== 'function') {
     };
     
     process.MakeCallback = function (handle, string, a, b, c, d, e) {
-        // if (!handle[string]) return;
+        if (!handle[string]) return;
         handle[string](a, b, c, d, e);
     };
 
@@ -104,10 +112,11 @@ if (typeof Number.isFinite !== 'function') {
         var execPath = path.resolve(process.cwd() + '/' + process.argv[0]);
         process.execPath = execPath;
         
-        global.Buffer = NativeModule.require('buffer');
-        
-        startup.globalConsole();
+        global.Buffer = NativeModule.require('buffer').Buffer;
         startup.globalTimeouts();
+        // startup.processStdio();
+        startup.globalConsole();
+        
     }
 
     startup.globalTimeouts = function() {
@@ -147,15 +156,61 @@ if (typeof Number.isFinite !== 'function') {
             return t.clearImmediate.apply(this, arguments);
         };
     };
-    
+
     startup.globalConsole = function() {
-        //hack process stdout
         process.stdout = {
             write : print
         };
         global.console = NativeModule.require('console');
     };
-    
+
+    startup.processStdio  = function() {
+
+        var stdio = NativeModule.require('./setup/stdio.js');
+        var stdin, stdout, stderr;
+
+        //stdout
+        process.__defineGetter__('stdout', function() {
+            if (stdout) return stdout;
+            stdout = stdio.createWritableStdioStream(1);
+            stdout.destroy = stdout.destroySoon = function(er) {
+                er = er || new Error('process.stdout cannot be closed.');
+                stdout.emit('error', er);
+            };
+          
+            if (stdout.isTTY) {
+                process.on('SIGWINCH', function() {
+                    stdout._refreshSize();
+                });
+            }
+            return stdout;
+        });
+
+        //stderr
+        process.__defineGetter__('stderr2', function() {
+            if (stderr) return stderr;
+            stderr = stdio.createWritableStdioStream(2);
+            stderr.destroy = stderr.destroySoon = function(er) {
+                er = er || new Error('process.stderr cannot be closed.');
+                stderr.emit('error', er);
+            };
+            
+            if (stderr.isTTY) {
+                process.on('SIGWINCH', function() {
+                    stderr._refreshSize();
+                });
+            }
+            return stderr;
+        });
+
+        //stdin
+        process.__defineGetter__('stdin', function() {
+            if (stdin) return stdin;
+            stdin = stdio.createReadableStdioStream(0);
+            return stdin;
+        });
+    };
+
     var NativeModule = process.NativeModule = function(id) {
         this.filename = NativeModule._source[id];// + '.js';
         this.id = id;
@@ -172,7 +227,6 @@ if (typeof Number.isFinite !== 'function') {
         assert      : 'js/assert.js',
         url         : 'js/url.js',
         querystring : 'js/querystring.js',
-        events      : 'js/events.js',
         buffer      : 'js/buffer.js',
         is          : 'js/is.js',
         handle      : 'js/handle.js',
@@ -184,7 +238,25 @@ if (typeof Number.isFinite !== 'function') {
         readline    : 'js/readline.js',
         socket      : 'js/socket.js',
         worker      : 'js/worker.js',
-        fs          : 'js/fs.js'
+        fs          : 'js/fs.js',
+        uv          : 'js/uv.js',
+        
+        //node modules
+        events      : 'js/node/events.js',
+        timers      : 'js/node/timers.js',
+        net         : 'js/node/net.js',
+        dns         : 'js/node/dns.js',
+        cluster     : 'js/node/cluster.js',
+        string_decoder      : 'js/node/string_decoder.js',
+
+        'internal/util'     : 'js/node/internal/util.js',
+        tty                 : 'js/node/tty.js',
+        stream              : 'js/node/stream.js',
+        _stream_readable    : 'js/node/stream/_stream_readable.js',
+        _stream_writable    : 'js/node/stream/_stream_writable.js',
+        _stream_duplex      : 'js/node/stream/_stream_duplex.js',
+        _stream_transform   : 'js/node/stream/_stream_transform.js',
+        _stream_passthrough : 'js/node/stream/_stream_passthrough.js'
     };
     
     NativeModule._cache  = {};

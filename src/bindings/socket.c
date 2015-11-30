@@ -1,5 +1,4 @@
 #include <fcntl.h>
-#include "inet.c"
 #include "como_errno.h"
 #ifndef _WIN32
     #include <net/if.h>
@@ -15,20 +14,7 @@ struct in6_addr como_loopback6 = IN6ADDR_LOOPBACK_INIT;
 COMO_METHOD(como_sock_getprotobyname) {
     const char* name = duk_require_string(ctx, 0);
 
-    #ifdef _WIN32
-        int iResult = 0;
-        WSADATA wsaData = {0};
-        iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        if (iResult != 0) {
-            COMO_SET_ERRNO_AND_RETURN(ctx, iResult);
-        }
-    #endif
-
     struct protoent *proto = getprotobyname(name);
-    
-    #ifdef _WIN32
-        WSACleanup();
-    #endif
 
     if (!proto){
         COMO_SET_ERRNO_AND_RETURN(ctx, errno);
@@ -41,6 +27,13 @@ COMO_METHOD(como_sock_getprotobyname) {
 /*=============================================================================
   Returns array of ip address and port of address structure
  ============================================================================*/
+const int ix = 1;
+#define como_bigendian() ( (*(char*)&ix) == 0 )
+
+unsigned short swaps( unsigned short val) {
+    return ((val & 0xff) << 8) | ((val & 0xff00) >> 8);
+}
+
 COMO_METHOD(como_sock_address_info) {
     struct sockaddr *addr = duk_require_pointer(ctx, 0);
 
@@ -76,7 +69,12 @@ COMO_METHOD(como_sock_address_info) {
                          (char *)dst, sizeof(dst));
 
             if (ret) COMO_SET_ERRNO_AND_RETURN(ctx, ret);
-            duk_push_int(ctx, addr_in->sin_port);
+            if (como_bigendian()){
+                duk_push_int(ctx, addr_in->sin_port);
+            } else {
+                duk_push_int(ctx, swaps(addr_in->sin_port));
+            }
+            
             duk_put_prop_index(ctx, arr_idx, 1);
         } break;
     }
@@ -366,15 +364,6 @@ COMO_METHOD(como_sock_socket) {
     int type     = duk_require_int(ctx, 1);
     int protocol = duk_require_int(ctx,2);
     
-    #ifdef _WIN32
-        int iResult = 0;
-        WSADATA wsaData = {0};
-        iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        if (iResult != 0) {
-            COMO_SET_ERRNO_AND_RETURN(ctx, iResult);
-        }
-    #endif
-    
     SOCKET sock = socket(af, type, protocol);
     if (sock == INVALID_SOCKET){
         COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
@@ -536,24 +525,33 @@ COMO_METHOD(como_sock_nonblock) {
 /*=============================================================================
   recv
  ============================================================================*/
+//FIXME: this is really ugly
+//use push_fixed_buffer instead
 COMO_METHOD(como_sock_recv) {
     SOCKET fd  = duk_require_int(ctx, 0);
     size_t len = (size_t)duk_require_int(ctx, 1);
     int flags  = duk_get_int(ctx, 2); /* default to zero */
 
-    char buf[len];
+    char *buf = malloc(sizeof(char)*len);
+    if (buf == NULL){
+        assert(0 && "can't allocate memory for recieveing data");
+    }
+
     size_t nread;
     do {
         nread = recv(fd, buf, len, flags);
     } while (nread < 0 && COMO_GET_LAST_WSA_ERROR == SOCKEINTR);
 
     if (nread == -1){
+        free(buf);
         COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     } else if (nread == 0){
+        free(buf);
         COMO_SET_ERRNO_AND_RETURN(ctx, COMOEOF);
     }
     
     duk_push_lstring(ctx, buf, nread);
+    free(buf);
     return 1;
 }
 
@@ -566,11 +564,10 @@ COMO_METHOD(como_sock_recv) {
 COMO_METHOD(como_sock_readIntoBuffer) {
     SOCKET fd  = duk_require_int(ctx, 0);
 
-    size_t len;
+    size_t len, nread;
     char *buf = duk_require_buffer(ctx, 1, &len);
     int flags  = duk_get_int(ctx, 2); /* default to zero */
 
-    size_t nread;
     do {
         nread = recv(fd, buf, len, flags);
     } while (nread < 0 && COMO_GET_LAST_WSA_ERROR == SOCKEINTR);
@@ -592,11 +589,11 @@ COMO_METHOD(como_sock_send) {
     SOCKET fd       = duk_require_int(ctx, 0);
     const char *buf;
     size_t length;
-    
+
     if (duk_get_type(ctx, 1) == DUK_TYPE_BUFFER){
         buf = duk_get_buffer(ctx, 1, &length);
     } else {
-        buf = duk_get_lstring(ctx, 1, &length);
+        buf = duk_require_lstring(ctx, 1, &length);
     }
 
     size_t len      = (size_t)duk_require_int(ctx, 2);
@@ -622,95 +619,11 @@ COMO_METHOD(como_sock_send) {
   Return a pair of connected local sockets, will be emulated on windows to
   to use TCP sockets
  ============================================================================*/
-#ifdef WIN32
-    int dumb_socketpair(SOCKET socks[2], int make_overlapped) {
-        union {
-           struct sockaddr_in inaddr;
-           struct sockaddr addr;
-        } a;
-        SOCKET listener;
-        int e;
-
-        WSADATA wsaData = {0};
-        int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        if (iResult != 0) {
-            return SOCKET_ERROR;
-        }
-
-        socklen_t addrlen = sizeof(a.inaddr);
-        DWORD flags = (make_overlapped ? WSA_FLAG_OVERLAPPED : 0);
-        int reuse = 1;
-
-        if (socks == 0) {
-          WSASetLastError(WSAEINVAL);
-          return SOCKET_ERROR;
-        }
-        socks[0] = socks[1] = INVALID_SOCKET;
-
-        listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (listener == INVALID_SOCKET)
-            return SOCKET_ERROR;
-
-        memset(&a, 0, sizeof(a));
-        a.inaddr.sin_family = AF_INET;
-        a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        a.inaddr.sin_port = 0;
-        
-        do {
-            if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
-                   (char*) &reuse, (socklen_t) sizeof(reuse)) == -1)
-                break;
-            if  (bind(listener, &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
-                break;
-
-            memset(&a, 0, sizeof(a));
-            if  (getsockname(listener, &a.addr, &addrlen) == SOCKET_ERROR)
-                break;
-            // win32 getsockname may only set the port number, p=0.0005.
-            // ( http://msdn.microsoft.com/library/ms738543.aspx ):
-            a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-            a.inaddr.sin_family = AF_INET;
-
-            if (listen(listener, 1) == SOCKET_ERROR)
-                break;
-
-            socks[0] = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, flags);
-            if (socks[0] == INVALID_SOCKET)
-                break;
-            if (connect(socks[0], &a.addr, sizeof(a.inaddr)) == SOCKET_ERROR)
-                break;
-
-            socks[1] = accept(listener, NULL, NULL);
-            if (socks[1] == INVALID_SOCKET)
-                break;
-
-            closesocket(listener);
-            return 0;
-        } while (0);
-
-        e = WSAGetLastError();
-        closesocket(listener);
-        closesocket(socks[0]);
-        closesocket(socks[1]);
-        WSASetLastError(e);
-        socks[0] = socks[1] = INVALID_SOCKET;
-        return SOCKET_ERROR;
-    }
-#else
-    int dumb_socketpair(int socks[2], int dummy) {
-        (void) dummy;
-        if (socks == 0) {
-                    //set_errno(EINVAL);
-                    return -1;
-        }
-        socks[0] = socks[1] = -1;
-        return socketpair(AF_LOCAL, SOCK_STREAM, 0, socks);
-    }
-#endif
 
 COMO_METHOD(como_sock_socketpair) {
+    int dummy = duk_get_int(ctx, 0);
     SOCKET sockets[2];
-    if (dumb_socketpair(sockets, 0) == SOCKET_ERROR){
+    if (dumb_socketpair(sockets, dummy) == SOCKET_ERROR){
         COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
     }
 
@@ -791,25 +704,14 @@ COMO_METHOD(como_host_to_ip) {
     const char *protocol = duk_require_string(ctx, 1);
     char ip[100];
     
-    #ifdef _WIN32
-        int iResult = 0;
-        WSADATA wsaData = {0};
-        iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-        if (iResult != 0) {
-            COMO_SET_ERRNO_AND_RETURN(ctx, iResult);
-        }
-    #endif
-
     int er = hostname_to_ip(hostname , protocol, ip);
-
-    #ifdef _WIN32
-        WSACleanup();
-    #endif
 
     if (er){ COMO_SET_ERRNO_AND_RETURN(ctx, er); }
     duk_push_string(ctx, ip);
     return 1;
 }
+
+
 
 /*=============================================================================
   socket export functions list
@@ -849,7 +751,7 @@ static const duk_function_list_entry como_socket_funcs[] = {
   socket export constants
  ============================================================================*/
 static const duk_number_list_entry como_socket_constants[] = {
-    
+    { "IPPROTO_IP"  , IPPROTO_IP},
     /* socket domain constants */
     { "AF_INET"     , AF_INET },
     { "AF_INET6"    , AF_INET6 },
@@ -884,6 +786,7 @@ static const duk_number_list_entry como_socket_constants[] = {
     { "SO_RCVLOWAT"  , SO_RCVLOWAT },
     { "SO_REUSEADDR" , SO_REUSEADDR},
     { "SO_ERROR"     , SO_ERROR},
+    { "SO_TYPE"      , SO_TYPE},
     
     #ifdef SO_NOSIGPIPE
     { "SO_NOSIGPIPE" , SO_NOSIGPIPE},
@@ -902,7 +805,7 @@ static const duk_number_list_entry como_socket_constants[] = {
     #endif
 
     //IPPROTO_TCP level
-    {"IPPROTO_TCP"  , IPPROTO_TCP},
+    { "IPPROTO_TCP" , IPPROTO_TCP},
     { "TCP_NODELAY" , TCP_NODELAY },
     
     /* socket shutdown constants */
@@ -942,6 +845,15 @@ static const duk_number_list_entry como_socket_constants[] = {
   * socket function initiation
 ******************************************************************************/
 static int init_binding_socket(duk_context *ctx) {
+    
+    #ifdef _WIN32
+        WSADATA wsaData = {0};
+        int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (iResult != 0) {
+            assert(0 && "couldn't initiate sockets");
+        }
+    #endif
+
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, como_socket_funcs);
     duk_put_number_list(ctx, -1, como_socket_constants);

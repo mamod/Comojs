@@ -45,6 +45,24 @@ my $buildStr = "gcc -Wall -Werror -Wno-missing-braces"
                 $buildStr .= " -lrt -lpthread -lm  -ldl";
             }
 
+# my $buildStr = "gcc -Wall -Werror -Wno-missing-braces -shared "
+#              . " -I./include"
+#              . " -I./include/mbedtls/library"
+#              . " -L."
+#              . " " . $build
+#              . " -o como" . (isWin() ? ".dll" : ".so");
+#             if (isWin()){
+#                 $buildStr .= " ANSI.o"
+#             } else {}
+
+#             $buildStr .= " src/main.c";
+
+#             if (isWin()){
+#                 $buildStr .= " -lws2_32";
+#             } else {
+#                 $buildStr .= " -lrt -lpthread -lm  -ldl";
+#             }
+
 system($buildStr) && die $!;
 if (isWin()){ unlink "ANSI.o";}
 1;

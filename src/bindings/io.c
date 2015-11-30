@@ -2,7 +2,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
-
 #ifdef _WIN32
     #include "../../include/ansi/ANSI.h"
     #include <io.h>

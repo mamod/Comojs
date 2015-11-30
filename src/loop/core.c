@@ -38,7 +38,14 @@ inline void handle_close (evHandle *h){
     } else if (h->type == EV_TIMER){
         timer_close(h);
     } else {
-        assert(0 && "CLOSING UNKNOWN HANDLE\n");
+        h->flags |= HANDLE_CLOSING;
+        handle_stop(h);
+        QUEUE_REMOVE(&h->queue);
+        QUEUE_INSERT_TAIL(&h->loop->closing_queue, 
+                          &h->queue);
+
+        //closing un initaited handle
+        //assert(0 && "CLOSING UNKNOWN HANDLE\n");
     }
 }
 

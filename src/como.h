@@ -23,6 +23,8 @@ const char *_COMO_MODULE_PATH = "";
     #define COMO_MODULE_INIT(ctx, filename) EXTERNC _COMO_INIT
 #endif
 
+void como_init_process(int argc, char *argv[], duk_context *ctx);
+
 //FIXME : Error checking?
 void como_require(duk_context *ctx, const char *file) {
     duk_push_global_stash(ctx);

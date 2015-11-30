@@ -16,7 +16,9 @@ if (process.main){
     w.onmessage = function(data){
         print("PARENT > this is main thread again");
         print("PARENT > some child sent me " + data);
-        w.destroy();
+        // w.destroy();
+        w.postMessage("Hello");
+        // process.sleep(1000);
     }
 
     //start the quest
@@ -24,4 +26,7 @@ if (process.main){
 
 } else {
     console.log('CHILD > a worker thread just created');
+    setInterval(function(){
+        console.log(99 + 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+    },100);
 }

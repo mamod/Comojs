@@ -15,6 +15,41 @@
   on success returns a stat object
   on error returns null and set process.errno
  ============================================================================*/
+COMO_METHOD(como_fs_fstat) {
+
+    int file = duk_require_int(ctx, 0);
+    struct stat st;
+
+    if (fstat(file, &st) == 0) {
+        duk_push_object(ctx);
+        
+        duk_push_int(ctx, st.st_size);
+        duk_put_prop_string(ctx, -2, "size");
+
+        duk_push_int(ctx, st.st_mtime);
+        duk_put_prop_string(ctx, -2, "mtime");
+
+        duk_push_int(ctx, st.st_atime);
+        duk_put_prop_string(ctx, -2, "atime");
+
+        duk_push_int(ctx, st.st_ctime);
+        duk_put_prop_string(ctx, -2, "ctime");
+
+        duk_push_int(ctx, st.st_mode);
+        duk_put_prop_string(ctx, -2, "mode");
+
+        duk_push_int(ctx, st.st_uid);
+        duk_put_prop_string(ctx, -2, "uid");
+
+        duk_push_int(ctx, st.st_gid);
+        duk_put_prop_string(ctx, -2, "gid");
+    } else {
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_ERROR);
+    }
+
+    return 1;
+}
+
 COMO_METHOD(como_fs_stat) {
 
     const char *file = duk_require_string(ctx, 0);
@@ -183,9 +218,9 @@ COMO_METHOD (como_fs_fileno) {
     return 1;
 }
 
-
 static const duk_function_list_entry como_fs_funcs[] = {
     { "stat"            , como_fs_stat,             1 },
+    { "fstat"           , como_fs_fstat,            1 },
     { "open"            , como_fs_open,             2 },
     { "close"           , como_fs_close,            1 },
     { "flush"           , como_fs_flush,            1 },
@@ -199,7 +234,6 @@ static const duk_function_list_entry como_fs_funcs[] = {
 };
 
 static const duk_number_list_entry como_fs_constants[] = {
-    
 
     /* file modes */
     {"S_IFMT"     , S_IFMT}, 

@@ -8,9 +8,9 @@ var tls    = process.binding('tls');
 var path   = require('path');
 var assert = require('assert');
 var errno  = process.binding('errno');
-var sock = require('socket');
-var crt = path.resolve(__dirname + '/cert/cert.pem');
-var key = path.resolve(__dirname + '/cert/key.pem');
+var sock   = require('socket');
+var crt    = path.resolve(__dirname + '/cert/cert.pem');
+var key    = path.resolve(__dirname + '/cert/key.pem');
 
 var read = function(fd, buf, len){
     var ret = sock.readIntoBuffer(fd, buf, sock.MSG_NOSIGNAL);
@@ -25,15 +25,13 @@ var write = function(fd, buf, len){
 
 var ssl = tls.init(crt, key, {
     write : write,
-
     read : read,
-
     cache : 3600
 });
 
 //SERVER
-var sock = process.binding('socket');
-var loop    = process.binding('loop');
+var sock      = process.binding('socket');
+var loop      = process.binding('loop');
 var main_loop = process.main_loop;
 
 var httpParser = require('http_parser');
@@ -129,10 +127,10 @@ function sockcb (handle, mask) {
 
                 console.log("error " + process.errno);
                 if (process.errno === errno.EPIPE){
-                    throw(9);
+                    throw('EPIPE');
                 }
+
                 ctx.close();
-                sock.shutdown(acceptSock, 2);
                 sock.close(acceptSock);
 
                 loop.handle_close(h);
@@ -143,7 +141,6 @@ function sockcb (handle, mask) {
 
         ctx.write(html);
         ctx.close();
-        sock.shutdown(acceptSock, 2);
         sock.close(acceptSock);
         loop.handle_close(h);
     });

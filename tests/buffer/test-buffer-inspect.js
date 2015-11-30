@@ -24,7 +24,7 @@ var assert = require('assert');
 
 var util = require('util');
 
-var buffer = require('buffer');
+var buffer = require('buffer').Buffer;
 
 buffer.INSPECT_MAX_BYTES = 2;
 

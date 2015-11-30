@@ -14,25 +14,28 @@ extern char **environ;
 
 /* ALL Bindings ar directly included from main.h */
 static const duk_function_list_entry bindings_funcs[] = {
+    { "threads"     , init_binding_threads,   0 },
     { "worker"      , init_binding_worker,    0 },
     { "buffer"      , init_binding_buffer,    0 },
     { "loop"        , init_binding_loop,      0 },
     { "socket"      , init_binding_socket,    0 },
     { "http-parser" , init_binding_parser,    0 },
     { "errno"       , init_binding_errno,     0 },
+    { "sys"         , init_binding_sys,       0 },
     { "io"          , init_binding_io,        0 },
     { "readline"    , init_binding_readline,  0 },
     { "tty"         , init_binding_tty,       0 },
     { "fs"          , init_binding_fs,        0 },
     { "tls"         , init_binding_tls,       0 },
     { "crypto"      , init_binding_crypto,    0 },
+    { "posix"       , init_binding_posix,     0 },
     { NULL          , NULL, 0 }
 };
 
 /** 
   * quick substring function for parsing ENV
 ******************************************************************************/
-static char *substring(char *string, int position, int length) {
+static char *_como_substring(char *string, int position, int length) {
     int c;
     char *pointer = malloc(length+1);
     if (pointer == NULL) {
@@ -65,7 +68,7 @@ static void _como_parse_environment (duk_context *ctx, duk_idx_t obj_idx){
         ENV_value = strchr(s, '=');
         if (ENV_value != NULL) {
             index = (int)(ENV_value - s);
-            ENV_name = substring(s, 0, index);
+            ENV_name = _como_substring(s, 0, index);
             
             /* pass equal sign */
             ENV_value++;
@@ -73,7 +76,6 @@ static void _como_parse_environment (duk_context *ctx, duk_idx_t obj_idx){
             duk_push_string(ctx, ENV_value);
             duk_put_prop_string(ctx, sub_obj_idx, ENV_name);
             free(ENV_name);
-            ENV_name = NULL;
         }
         
         s = *(environ+i);
@@ -294,6 +296,10 @@ int main(int argc, char *argv[], char** envp) {
     duk_context *ctx = como_create_new_heap(argc, argv, NULL);
     como_run(ctx);
     duk_pop(ctx);  /* pop eval result */
+
+    //force object finalizers
+    duk_gc(ctx, 0);
+    duk_gc(ctx, 0);
 
     duk_destroy_heap(ctx);
     return 0;

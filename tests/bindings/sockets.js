@@ -254,13 +254,11 @@ var gPORT = 9090;
     assert.ok(opt === null, process.errno);
 
     //dummy option
-    opt = socket.getsockopt(s, socket.SOL_SOCKET,
-               9999);
+    opt = socket.getsockopt(s, socket.SOL_SOCKET, 9999);
     assert.ok(opt === null, process.errno);
 
 
-    opt = socket.getsockopt(s, socket.SOL_SOCKET,
-               socket.SO_REUSEADDR);
+    opt = socket.getsockopt(s, socket.SOL_SOCKET, socket.SO_REUSEADDR);
 
     //option is not set
     assert.equal(opt, 0);

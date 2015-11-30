@@ -190,6 +190,7 @@ COMO_METHOD(como_tls_context_handshake) {
   //handshae ... ok
   var data = context.read();
  ============================================================================*/
+#define COMO_TLS_READ_LENGTH 8 * 1024
 COMO_METHOD(como_tls_context_read) {
     
     duk_push_this(ctx);
@@ -201,12 +202,11 @@ COMO_METHOD(como_tls_context_read) {
         COMO_SET_ERRNO_AND_RETURN(ctx, EINVAL);
     }
 
-    int len = 8 * 1024;
-    unsigned char buf[len];
+    unsigned char buf[COMO_TLS_READ_LENGTH];
 
     int nread;
     do {
-        nread = mbedtls_ssl_read( tlsContext->ssl, buf, len );
+        nread = mbedtls_ssl_read( tlsContext->ssl, buf, COMO_TLS_READ_LENGTH );
     } while (nread < 0 && COMO_GET_LAST_WSA_ERROR == SOCKEINTR);
 
     if (nread < 0){
@@ -228,33 +228,34 @@ COMO_METHOD(como_tls_context_read) {
   ex:
   context.write("some string");
  ============================================================================*/
+//FIXME : dynamic allocation?!
 COMO_METHOD(como_tls_context_write) {
 
-    size_t length;
-    const char *str = duk_require_lstring(ctx, 0, &length);
+    // size_t length;
+    // const char *str = duk_require_lstring(ctx, 0, &length);
 
-    duk_push_this(ctx);
-    duk_get_prop_string(ctx, -1, "\xff""tlsContext");
-    comoTlsContext *tlsContext = duk_get_pointer(ctx, -1);
-    duk_pop_2(ctx);
+    // duk_push_this(ctx);
+    // duk_get_prop_string(ctx, -1, "\xff""tlsContext");
+    // comoTlsContext *tlsContext = duk_get_pointer(ctx, -1);
+    // duk_pop_2(ctx);
 
-    if ( tlsContext == NULL ){
-        COMO_SET_ERRNO_AND_RETURN(ctx, EINVAL);
-    }
+    // if ( tlsContext == NULL ){
+    //     COMO_SET_ERRNO_AND_RETURN(ctx, EINVAL);
+    // }
 
-    unsigned char buf[length];
-    size_t len = sprintf( (char *) buf, str,
-                   mbedtls_ssl_get_ciphersuite( tlsContext->ssl ) );
+    // unsigned char buf[length];
+    // size_t len = sprintf( (char *) buf, str,
+    //                mbedtls_ssl_get_ciphersuite( tlsContext->ssl ) );
 
-    int written;
-    do {
-        written = mbedtls_ssl_write( tlsContext->ssl, buf, len );
-    } while (written <= 0 && COMO_GET_LAST_WSA_ERROR == SOCKEINTR);
-    if (written < 0){
-        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
-    }
+    // int written;
+    // do {
+    //     written = mbedtls_ssl_write( tlsContext->ssl, buf, len );
+    // } while (written <= 0 && COMO_GET_LAST_WSA_ERROR == SOCKEINTR);
+    // if (written < 0){
+    //     COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
+    // }
 
-    duk_push_int(ctx, written);
+    // duk_push_int(ctx, written);
     return 1;
 }
 

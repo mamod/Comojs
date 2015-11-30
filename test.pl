@@ -15,6 +15,15 @@ find(sub {
 }, './tests');
 
 for my $test (@tests){
+
+    if ($test =~ /echo-server\.js/){
+        next;
+    }
+
+    if ($test =~ /uv/){
+        next;
+    }
+
     print "Testing .. $test \n\n";
     my $ret = system($command . $test);
     print "Done Testing .. $test \n\n";

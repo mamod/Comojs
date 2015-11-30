@@ -18,7 +18,28 @@
 //// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
 //// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 //// USE OR OTHER DEALINGS IN THE SOFTWARE.
+exports._exceptionWithHostPort = function(err,
+                                          syscall,
+                                          address,
+                                          port,
+                                          additional) {
+  var details;
+  if (port && port > 0) {
+    details = address + ':' + port;
+  } else {
+    details = address;
+  }
 
+  if (additional) {
+    details += ' - Local (' + additional + ')';
+  }
+  var ex = exports._errnoException(err, syscall, details);
+  ex.address = address;
+  if (port) {
+    ex.port = port;
+  }
+  return ex;
+};
 
 var formatRegExp = /%[sdj%]/g;
 exports.format = function(f) {
@@ -580,7 +601,7 @@ function isPrimitive(arg) {
 exports.isPrimitive = isPrimitive;
 
 function isBuffer(arg) {
-  return arg instanceof Buffer;
+  return typeof arg === 'buffer';
 }
 exports.isBuffer = isBuffer;
 

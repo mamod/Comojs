@@ -101,7 +101,6 @@ int _como_worker_thread (void *data){
             duk_push_global_object(worker->ctx);
             duk_get_prop_string(worker->ctx, -1, "process");
             duk_get_prop_string(worker->ctx, -1, "_emitExit");
-            // dump_stack(worker->ctx, "PP");
             duk_call(worker->ctx, 0);
             break;
         }
@@ -115,10 +114,9 @@ static int _worker_dispatch_cb (evHandle *handle){
     comoWorker *worker = handle->data;
     duk_context *ctx = worker->Mainctx;
 
-    mtx_lock(&worker->mtx);
+    // mtx_lock(&worker->mtx);
     QUEUE *q;
     while ( !QUEUE_EMPTY(&worker->queueOut) ){
-
         q = QUEUE_HEAD(&(worker)->queueOut);
         QUEUE_REMOVE(q);
         comoQueue *queue = QUEUE_DATA(q, comoQueue, queue);
@@ -147,7 +145,7 @@ static int _worker_dispatch_cb (evHandle *handle){
 
         free(queue);
     }
-    mtx_unlock(&worker->mtx);
+    // mtx_unlock(&worker->mtx);
 
     if (worker->destroy == 2){
         

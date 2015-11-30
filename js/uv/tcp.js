@@ -4,67 +4,91 @@ var sock   = require('socket');
 var errno  = process.binding('errno');
 var loop   = require('loop');
 var uv     = require('uv');
+var assert = require('assert');
+var io     = process.binding('io');
+
+var isWin  = process.platform === "win32";
+
 
 util.inherits(TCP, stream);
 function TCP (){
     stream.call(this, 'TCP');
 }
 
-TCP.prototype.maybe_new_socket = function(domain){
-    if (this.fd !== -1) { return 0; }
-    var fd = sock.socket(domain, sock.SOCK_STREAM, 0);
-    if (!fd){
+TCP.prototype.open = function(s){
+    if (!sock.nonblock(s, 1)){
         return process.errno;
     }
-    if (sock.SO_NOSIGPIPE){
-        if (!sock.setsockopt(fd, sock.SOL_SOCKET,
-                      sock.SO_NOSIGPIPE, 1)){
-    
-            return process.errno;
-        }
+
+    return this.stream_open(s, uv.STREAM_READABLE | uv.STREAM_WRITABLE);
+}
+
+TCP.prototype.maybe_new_socket = function(domain, flags){
+    if (domain == sock.AF_UNSPEC || this.fd !== -1) {
+        this.flags |= flags;
+        return 0;
     }
-    this.stream_open(fd);
+
+    var fd = uv.socket(domain, sock.SOCK_STREAM, 0);
+    if (!fd) return process.errno;
+
+    this.stream_open(fd, flags);
     return 0;
 };
 
-TCP.prototype.bind = function(ip, port){
-    var self = this;
-    this.addr = sock.pton(ip, port);
-    if (this.addr === null){
-        throw new Error("can't bind " + process.errno);
+TCP.prototype.bind = function(addr, flags) {
+
+    var family = sock.family(addr);
+
+    /* Cannot set IPv6-only mode on non-IPv6 socket. */
+    if ((flags & uv.TCP_IPV6ONLY) && family !== uv.AF_INET6) {
+        return errno.EINVAL;
     }
 
-    this.ip = ip;
-    this.port = port;
-
-    this.maybe_new_socket(sock.AF_INET);
-
-    if (!sock.setsockopt(this.fd, sock.SOL_SOCKET,
-                      sock.SO_REUSEADDR, 1)){
+    var err = this.maybe_new_socket(family, uv.STREAM_READABLE | uv.STREAM_WRITABLE);
     
-        throw new Error("error " + process.errno);
+    if (err) return err;
+
+    if (!sock.setsockopt(this.fd, sock.SOL_SOCKET, sock.SO_REUSEADDR, 1)) {
+        return process.errno;
     }
 
-    if (!sock.bind(this.fd, this.addr)){
-        throw new Error("can't bind IP address " + this.ip + " errno: " + process.errno);
+    process.errno = 0;
+    if (!sock.bind(this.fd, addr) && process.errno !== errno.EADDRINUSE) {
+        if (process.errno === errno.EAFNOSUPPORT) {
+            /* OSX, other BSDs and SunoS fail with EAFNOSUPPORT when binding a
+            * socket created with AF_INET to an AF_INET6 address or vice versa. */
+            return errno.EINVAL;
+        }
+        return process.errno;
     }
+
+    this.delayed_error = process.errno;
+
+    if (family === sock.AF_INET6) {
+        this.flags |= uv.HANDLE_IPV6;
+    }
+
+    return 0;
 };
 
 TCP.prototype.listen = function(backlog, cb){
     var self = this;
-    this.maybe_new_socket(sock.AF_INET);
 
-    var socket = this.fd;
-    if (!sock.listen(socket, backlog)){
-        return process.errno;
+    if (this.delayed_error) {
+        return this.delayed_error;
     }
 
-    if (!sock.nonblock(socket, 1)){
+    this.maybe_new_socket(sock.AF_INET, uv.STREAM_READABLE);
+
+    if (!sock.listen(this.fd, backlog)){
         return process.errno;
     }
 
     this.connection_cb = cb.bind(this);
 
+    //FIXME: io_watcher still here
+    //we need to free resources
     this.handle = loop.io(function(h, events){
         self.server_io(events);
     });
@@ -74,8 +98,8 @@ TCP.prototype.listen = function(backlog, cb){
 };
 
 TCP.prototype.connect = function(addr, cb){
-    
-    if (handle.connect_req){
+
+    if (this.connect_req){
         return errno.EALREADY;  /* FIXME(bnoordhuis) -EINVAL or maybe -EBUSY. */
     }
     
@@ -88,26 +112,30 @@ TCP.prototype.connect = function(addr, cb){
 
     do {
         r = sock.connect(this.fd, addr);
-    } while (r === null && process.errno === errno.EINTR);
+        if (isWin) io.can_read(this.fd, 1);
+    } while (
+        r === null && (process.errno === errno.EINTR ||
+        isWin && process.errno === errno.EWOULDBLOCK)
+    );
 
     var error = process.errno;
-
     if (r === null) {
-        if (error == errno.EINPROGRESS) {
+        if (error === errno.EINPROGRESS || (isWin && error === 10056)) {
+            // this.delayed_error = error;
             /* not an error */
-        } else if (error == errno.ECONNREFUSED) {
+        } else if (error === errno.ECONNREFUSED || error === 10037) {
             /* If we get a ECONNREFUSED wait until the next tick to report the
              * error. Solaris wants to report immediately--other unixes want to
              * wait.
              */
-            this.delayed_error = -error;
+            this.delayed_error = errno.ECONNREFUSED;
         } else {
             return error;
         }
     }
 
     this.connect_req    = 1;
-    this.connect_req_cb = cb.bind(this);
+    if (cb) this.connect_req_cb = cb.bind(this);
 
     this.io_watcher.start(this.fd, loop.POLLOUT);
 

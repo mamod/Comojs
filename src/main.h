@@ -56,7 +56,7 @@
 #include "duktape/duktape.h"
 #include "thread/tinycthread.h"
 
- void dump_stack(duk_context *ctx, const char *name) {
+void dump_stack(duk_context *ctx, const char *name) {
     duk_idx_t i, n;
     n = duk_get_top(ctx);
     printf("%s (top=%ld):", name, (long) n);
@@ -119,7 +119,17 @@ void como_sleep (int timeout){
 }
 
 /* BINDINGS */
+
+#include "utils/inet.c"
+#include "utils/socketpair.c"
+
+#ifndef _WIN32
+#include "utils/core.c"
+#endif
+
 #include "bindings/errno.c"
+#include "bindings/sys.c"
+#include "bindings/posix.c"
 #include "bindings/loop.c"
 #include "bindings/buffer.c"
 #include "bindings/socket.c"
@@ -131,6 +141,7 @@ void como_sleep (int timeout){
 #include "bindings/fs.c"
 #include "bindings/crypto.c"
 #include "bindings/tls.c"
+#include "bindings/threads.c"
 
 #ifdef _WIN32
     #define PLATFORM "win32"

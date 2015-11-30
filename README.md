@@ -1,41 +1,26 @@
-Comojs
-======
+# Comojs
 
-Server side javascript using [duktape](https://github.com/svaarala/duktape) javascript engine
+This is a development branch for nodejs api using duktape
+embeddable javascript engine and a tiny event loop
 
-Currnt State
-------------
+This is a work in progress, the first release will be once I get
+the following modules pass all tests
 
-Work in progress, lots of things to do, lots of things to fix, and even more lots of lots of things :)
+- net
+- dns
+- http
+- https
+- fs
+- child_process
 
-Philosophy
-----------
-* Everthing Should by as tiny as possible
-* Implement most things in javascript
-* Must maintaine a low footprint memory usage
-* Should run without compilation using tinycc compiler
-* Fast compilation time, current compilation time ~ 3 seconds
+### Please note that performance will never match nodejs for 2 main reasons
 
-Maybe
------
-"maybe" eventually Comojs will run unmodified nodejs modules (not native modules) but this is not a current purpose of Comojs.
+1 - nodejs use V8 which is a JIT-based javascript engine, duktape isn't, duktape was designed for portability and memory constrained devices
 
-Build
------
+2 - nodejs use libuv for it's event loop and c++ wrappers to bridge with javascript, comojs use a tiny event loop and all wrappers written in pure javascript for simplicity, I only used C for things that can't be done in Javascript
 
-You need to have perl installed, this is just for now until I write a Makefile
+## design
 
-``perl make.pl``
+To be fully compatible with nodejs api the easiest thing to do is using nodejs modules as is and then write wrappers in javascript to emulate libuv and node C++ wrappers see ``js/uv`` and ``js/node/wrapper`` folders, this contributed to reduce performance but also speed the development process, I may rethink this approach once we pass the tests :)
 
-or
---
-
-You can run directly without compilation using tinycc compiler
-
-* make sure you have tinycc installed and in your system path
-* on windows
-
-   ``como ./examples/readline.js``
-* on linux
-    
-    ``./como.sh ./examples/readline.js``
+**More to come soon :)**

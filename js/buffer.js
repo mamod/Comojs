@@ -38,7 +38,7 @@ function Buffer (buf, encoding){
             return Buffer(buf.data);
         }
         return Duktape.Buffer(0);
-    }else {
+    } else {
         return buf;
     }
 }
@@ -469,7 +469,6 @@ Duktape.Buffer.prototype.writeInt32LE = function(value, offset, noAssert) {
     return offset + 4;
 };
 
-
 Duktape.Buffer.prototype.writeInt32BE = function(value, offset, noAssert) {
     value = +value;
     offset = offset >>> 0;
@@ -482,6 +481,31 @@ Duktape.Buffer.prototype.writeInt32BE = function(value, offset, noAssert) {
     return offset + 4;
 };
 
+Buffer.isEncoding = function(encoding) {
+  var loweredCase = false;
+  for (;;) {
+    switch (encoding) {
+      case 'hex':
+      case 'utf8':
+      case 'utf-8':
+      case 'ascii':
+      case 'binary':
+      case 'base64':
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return true;
+
+      default:
+        if (loweredCase)
+            return false;
+        
+        encoding = ('' + encoding).toLowerCase();
+        loweredCase = true;
+    }
+  }
+};
 
 Buffer.SlowBuffer = Duktape.Buffer;
-module.exports = Buffer;
+module.exports.Buffer = Buffer;
