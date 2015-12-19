@@ -295,6 +295,22 @@ void como_init_process(int argc, char *argv[], duk_context *ctx) {
     /* process platform*/
     duk_push_string(ctx, PLATFORM);
     duk_put_prop_string(ctx, -2, "platform");
+
+    /* threads support */
+    #ifdef COMO_NO_THREADS
+    duk_push_false(ctx);
+    #else
+    duk_push_true(ctx);
+    #endif
+    duk_put_prop_string(ctx, -2, "threads");
+
+    /* tls support */
+    #ifdef COMO_NO_TLS
+    duk_push_false(ctx);
+    #else
+    duk_push_true(ctx);
+    #endif
+    duk_put_prop_string(ctx, -2, "tls");
     
     /* argv */
     duk_idx_t arr_idx = duk_push_array(ctx);
