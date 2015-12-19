@@ -507,5 +507,62 @@ Buffer.isEncoding = function(encoding) {
   }
 };
 
-Buffer.SlowBuffer = Duktape.Buffer;
-module.exports.Buffer = Buffer;
+function base64ByteLength(str, bytes) {
+  // Handle padding
+  if (str.charCodeAt(bytes - 1) === 0x3D)
+    bytes--;
+  if (bytes > 1 && str.charCodeAt(bytes - 1) === 0x3D)
+    bytes--;
+
+  // Base64 ratio: 3/4
+  return (bytes * 3) >>> 2;
+}
+
+function byteLength(string, encoding) {
+  if (typeof string !== 'string')
+    string = '' + string;
+
+  var len = string.length;
+  if (len === 0)
+    return 0;
+
+  // Use a for loop to avoid recursion
+  var loweredCase = false;
+  for (;;) {
+    switch (encoding) {
+      case 'ascii':
+      case 'binary':
+        return len;
+
+      case 'utf8':
+      case 'utf-8':
+      case undefined:
+        return Duktape.Buffer(string).byteLength;
+
+      case 'ucs2':
+      case 'ucs-2':
+      case 'utf16le':
+      case 'utf-16le':
+        return len * 2;
+
+      case 'hex':
+        return len >>> 1;
+
+      case 'base64':
+        return base64ByteLength(string, len);
+
+      default:
+        // The C++ binding defaulted to UTF8, we should too.
+        if (loweredCase)
+          return binding.byteLengthUtf8(string);
+
+        encoding = ('' + encoding).toLowerCase();
+        loweredCase = true;
+    }
+  }
+}
+
+Buffer.byteLength = byteLength;
+
+exports.SlowBuffer = Duktape.Buffer;
+exports.Buffer = Buffer;

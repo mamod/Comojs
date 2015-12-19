@@ -64,11 +64,11 @@ COMO_METHOD(como_crypto_sha512) {
 }
 
 static const duk_function_list_entry como_crypto_funcs[] = {
-    { "md5"            , como_crypto_md5,             1 },
-    { "sha1"           , como_crypto_sha1,            1 },
-    { "sha256"         , como_crypto_sha256,          1 },
-    { "sha512"         , como_crypto_sha512,          1 },
-    { NULL, NULL, 0 }
+    {"md5", como_crypto_md5,                    1},
+    {"sha1", como_crypto_sha1,                  1},
+    {"sha256", como_crypto_sha256,              1},
+    {"sha512", como_crypto_sha512,              1},
+    {NULL, NULL,                                0}
 };
 
 static int init_binding_crypto(duk_context *ctx) {

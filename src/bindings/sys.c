@@ -1,4 +1,7 @@
 #include <stdio.h>
+#include <fcntl.h>
+#include <sys/time.h>
+#include <sys/types.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -40,6 +43,20 @@ COMO_METHOD(como_duplicate_handle) {
         duk_push_int(ctx, (int)dupHandle);
     #else
         assert(0 && "DuplicateHandle Not supported on this platform");
+    #endif
+    return 1;
+}
+
+COMO_METHOD(como_get_os_fd) {
+    #ifdef _WIN32
+        HANDLE handle  = (HANDLE)duk_require_int(ctx, 0);
+        int fd = _open_osfhandle((intptr_t)handle, O_RDONLY);
+        if (fd == -1){
+            COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_ERROR);
+        }
+        duk_push_int(ctx, fd);
+    #else
+        assert(0 && "Getosfhandle Not supported on this platform");
     #endif
     return 1;
 }
@@ -141,17 +158,18 @@ COMO_METHOD(como_sys_fork) {
 }
 
 static const duk_function_list_entry como_sys_funcs[] = {
-    { "cloexec"            , como_sys_cloexec,         2 },
-    { "GetExitCodeProcess" , como_get_exit_code, 1},
-    { "DuplicateHandle"    , como_duplicate_handle, 1},
-    { "GetOsFHandle"       , como_get_os_fhandle, 1},
-    { "CreateProcess"      , como_create_process, 3   },
-    { "fork"               , como_sys_fork, 0   },
-    { NULL                 , NULL, 0 }
+    {"cloexec", como_sys_cloexec,                 2},
+    {"GetExitCodeProcess", como_get_exit_code,    1},
+    {"DuplicateHandle", como_duplicate_handle,    1},
+    {"GetOsFHandle", como_get_os_fhandle,         1},
+    {"GetHandleFd",  como_get_os_fd,              1},
+    {"CreateProcess", como_create_process,        3},
+    {"fork", como_sys_fork,                       0},
+    {NULL, NULL,                                  0}
 };
 
 static const duk_number_list_entry como_sys_constants[] = {
-    { NULL, 0 }
+    {NULL, 0}
 };
 
 static int init_binding_sys(duk_context *ctx) {

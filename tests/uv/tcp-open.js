@@ -30,11 +30,11 @@ function close_cb (){
 }
 
 function read_cb (err, buf){
+    print("aaaaaaaa");
     if (!err) {
         assert(buf.length === 4);
         assert.strictEqual(buf, "PING");
     } else {
-
         assert(err === errno.EOF);
         print("GOT EOF\n");
         this.close(close_cb);
@@ -42,11 +42,10 @@ function read_cb (err, buf){
 }
 
 function connect_cb (status){
-
     var buf = "PING";
     var r;
 
-
+    assert.equal(status, 0);
     var stream = this;
     connect_cb_called++;
 

@@ -5,11 +5,11 @@ exports.guessHandleType = bindings.guessHandleType;
 
 function TTY (fd, readable){
     this._handle = new uv.TTY(fd, readable);
+    this.readStart(function(){});
 };
 
 TTY.prototype.writeUtf8String = function(req, data){
     this._handle.write(data);
-    // bindings.write(1, data);
 };
 
 TTY.prototype.getWindowSize = function(arr){
@@ -37,8 +37,12 @@ TTY.prototype.readStart = function(){
     });
 };
 
-TTY.prototype.setRawMode = function(){
-    
+TTY.prototype.readStop = function(){
+    return this._handle.read_stop();
+};
+
+TTY.prototype.setRawMode = function(mode){
+    this._handle.set_mode(mode ? 1 : 0);
 };
 
 exports.TTY = TTY;

@@ -11,12 +11,12 @@ function fail_cb() {
 
 function write_cb(status) {
     console.log("write cb");
-    this.close();
+    this.handle.close();
 }
 
 function connect_cb(status) {
     var tcp = this;
-    ASSERT(0 === status);
+    ASSERT.equal(status, 0);
     setTimeout(function(){
         tcp.write("PING", write_cb);
         ASSERT(0 == tcp.read_stop());
@@ -27,7 +27,7 @@ function connect_cb(status) {
 (function(){
     var addr = uv.ip4_address("127.0.0.1", TEST_PORT);
     var tcp = new uv.TCP();
-    tcp.connect(addr, connect_cb);
+    ASSERT(tcp.connect(addr, connect_cb) == 0);
 })();
 
 

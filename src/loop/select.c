@@ -28,34 +28,9 @@ int io_add (evHandle* handle, int mask) {
     if (mask & EV_POLLIN)  FD_SET(fd, &api->rfds);
     if (mask & EV_POLLOUT) FD_SET(fd, &api->wfds);
     if (mask & EV_POLLERR) FD_SET(fd, &api->efds);
-    
-    return 0;
-}
 
-int io_remove (evHandle* handle, int mask) {
-    if (!_is_active(handle)) return 0;
-    assert(handle && handle->type == EV_IO);
-    assert(handle->ev != NULL);
-
-    evLoop *loop = handle->loop;
-    evAPI  *api  = loop->api;
-    evIO   *io   = handle->ev;
-
-    assert(io->fd > -1);
-
-    if (mask & EV_POLLIN) {
-        io->mask &= ~EV_POLLIN;
-        FD_CLR(io->fd, &api->rfds);
-    }
-    
-    if (mask & EV_POLLOUT) {
-        io->mask &= ~EV_POLLOUT;
-        FD_CLR(io->fd, &api->wfds);
-    }
-
-    if (mask & EV_POLLERR) {
-        io->mask &= ~EV_POLLERR;
-        FD_CLR(io->fd, &api->efds);
+    if (QUEUE_EMPTY(&io->queue)){
+        QUEUE_INSERT_TAIL(&handle->loop->io_queue, &io->queue);
     }
 
     return 0;
@@ -64,7 +39,9 @@ int io_remove (evHandle* handle, int mask) {
 int io_start (evHandle* handle, int fd, int mask){
     assert(handle != NULL);
     if (handle->flags & HANDLE_CLOSING) return 0;
-    if (_is_active(handle)) return io_add(handle, mask);
+
+    assert(handle->type == 0 || handle->type == EV_IO);
+    if (handle->type == EV_IO) return io_add(handle, mask);
 
     evIO *io = malloc(sizeof(*io));
     memset(io, 0, sizeof(*io));
@@ -87,27 +64,48 @@ int io_start (evHandle* handle, int fd, int mask){
     return 0;
 }
 
-int io_stop (evHandle* handle, int mask){
-    // if (handle->flags & HANDLE_CLOSING) return 0;
-    if (!_is_active(handle)) return 0;
-
+int io_stop (evHandle* handle, int mask) {
+    assert(handle && handle->type == EV_IO);
     assert(handle->ev != NULL);
-    evIO *io = handle->ev;
-    io_remove(handle, mask);
-    
-    if (!io->mask){
-        handle->flags |= HANDLE_CLOSING;
-        handle_stop(handle);
-        QUEUE_REMOVE(&io->queue);
-        QUEUE_INSERT_TAIL(&handle->loop->closing_queue, 
-                          &handle->queue);
+
+    evLoop *loop = handle->loop;
+    evAPI  *api  = loop->api;
+    evIO   *io   = handle->ev;
+
+    assert(io->fd > -1);
+
+    if (io->mask & mask) {
+        io->mask &= ~mask;
+        if (mask & EV_POLLIN) {
+            FD_CLR(io->fd, &api->rfds);
+        }
+        
+        if (mask & EV_POLLOUT) {
+            FD_CLR(io->fd, &api->wfds);
+        }
+
+        if (mask & EV_POLLERR) {
+            FD_CLR(io->fd, &api->efds);
+        }
     }
-    
+
     return 0;
 }
 
 int io_close (evHandle* handle) {
-    return io_stop(handle, EV_POLLOUT | EV_POLLIN | EV_POLLERR);
+    if (handle->flags & HANDLE_CLOSING) return 0;
+
+    assert(handle->ev != NULL);
+    evIO *io = handle->ev;
+
+    io_stop(handle, EV_POLLOUT | EV_POLLIN | EV_POLLERR);
+
+    handle_stop(handle);
+    QUEUE_REMOVE(&io->queue);
+    QUEUE_INSERT_TAIL(&handle->loop->closing_queue, 
+                      &handle->queue);
+    handle->flags |= HANDLE_CLOSING;
+    return 0;
 }
 
 static int loop_poll_create(evLoop *loop) {
@@ -170,11 +168,9 @@ static void io_poll (evLoop *loop, int timeout) {
                 }
                 nevents++;
             }
-            
+
             /* break once we match number of events */
-            if (nevents == retval){
-                break;
-            }
+            if (nevents == retval) break;
         }
     }
     

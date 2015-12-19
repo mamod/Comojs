@@ -1,7 +1,7 @@
 #ifndef _COMO_H
 #define _COMO_H
 
-#include "../include/duktape/duktape.h"
+#include "duktape/duktape.h"
 
 const char *_COMO_MODULE_PATH = "";
 

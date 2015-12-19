@@ -2,6 +2,11 @@
     #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
+#define CHECK_NOT_OOB(r)                                                    \
+  do {                                                                      \
+    if (!(r)) duk_error(ctx, DUK_ERR_RANGE_ERROR, "out of range index");    \
+  } while (0)
+
 static const unsigned long offsetsFromUTF8[6] = {
     0x00000000UL, 0x00003080UL, 0x000E2080UL,
     0x03C82080UL, 0xFA082080UL, 0x82082080UL
@@ -57,6 +62,20 @@ enum Encodings {
     BUFFER,
     RAW
 };
+
+inline int ParseArrayIndex(duk_context *ctx, int index, size_t def, size_t *ret) {
+    if (duk_is_undefined(ctx, index)){
+        *ret = def;
+        return 1;
+    }
+
+    duk_int32_t tmp_i = duk_to_uint32(ctx, index);
+
+    if (tmp_i < 0) return 0;
+
+    *ret = tmp_i;
+    return 1;
+}
 
 /*=============================================================================
   UTF8 slice
@@ -214,7 +233,7 @@ COMO_METHOD(como_buffer_slice) {
 /*=============================================================================
   UTF8 write
  ============================================================================*/
-size_t como_utf8_write (size_t max,
+size_t como__utf8_write (size_t max,
                              const char *src,
                              const char *srcEnd,
                              char *dst,
@@ -308,11 +327,11 @@ size_t como_base64_write (const char* start,
 /*=============================================================================
   ASCII write
  ============================================================================*/
-size_t como_ascii_write (const char* start,
-                             const char* src,
-                             const char* srcEnd,
-                             char* dst,
-                             char* dstEnd){
+size_t como_ascii_write (const char *start,
+                             const char *src,
+                             const char *srcEnd,
+                             char *dst,
+                             char *dstEnd){
     
     while (src < srcEnd && dst < dstEnd) {
         unsigned long ch;
@@ -406,7 +425,7 @@ COMO_METHOD(como_buffer_write) {
             ret = max_length;
             break;
         case UTF8   : 
-            ret = como_utf8_write(max_length, src, srcEnd, dst, dstEnd);
+            ret = como__utf8_write(max_length, src, srcEnd, dst, dstEnd);
             break;
         case HEX    : 
             ret = como_hex_write(max_length, src, srcEnd, dst, dstEnd);
@@ -435,7 +454,7 @@ COMO_METHOD(como_buffer_fill) {
     
     //buffer
     size_t bufferSize;
-    void *buffer = duk_require_buffer(ctx, 0, &bufferSize);
+    void *buffer = duk_require_buffer_data(ctx, 0, &bufferSize);
 
     size_t start, end, at_length, length;
     
@@ -626,28 +645,219 @@ COMO_METHOD(como_buffer_foreach) {
     return 1;
 }
 
+
+//new
+COMO_METHOD(como_buffer_ascii_decode) {
+    size_t byteLength;
+    
+    const char *src  = duk_require_lstring(ctx, 0, &byteLength);
+    size_t charLen   = duk_get_length(ctx, 0);
+
+    if (charLen == byteLength){
+        return 1;
+    }
+
+    char *dest = duk_push_fixed_buffer(ctx, charLen);
+    
+    int i = 0;
+    for (i = 0; i < charLen; i++) {
+        unsigned long ch;
+        int nb;
+        nb = UTF8ExtraBytes[(unsigned char)*src];
+        ch = 0;
+        /* fast case */
+        if (nb == 0){
+            ch += (unsigned char)*src++;
+        } else {
+            switch (nb) {
+                /* these fall through deliberately */
+                case 5: ch += (unsigned char)*src++; ch <<= 6;
+                case 4: ch += (unsigned char)*src++; ch <<= 6;
+                case 3: ch += (unsigned char)*src++; ch <<= 6;
+                case 2: ch += (unsigned char)*src++; ch <<= 6;
+                case 1: ch += (unsigned char)*src++; ch <<= 6;
+                case 0: ch += (unsigned char)*src++;
+            }
+        }
+        
+        ch -= offsetsFromUTF8[nb];
+        *dest++ = ch;
+    }
+    
+    return 1;
+}
+
+COMO_METHOD(como_buffer_hex_slice) {
+
+    size_t start = duk_require_int(ctx, 0);
+    size_t end   = duk_require_int(ctx, 1);
+
+    size_t len;
+    duk_push_this(ctx);
+    void *buffer = duk_require_buffer_data(ctx, -1, &len);
+
+    char* src = buffer + start;
+    uint32_t dstlen = (end - start) * 2;
+    if (dstlen == 0) {
+        duk_push_string(ctx, "");
+        return 1;
+    }
+
+    char *dst = (char *)malloc(dstlen);
+    if (dst == NULL){
+        assert(0 && "hexSlice out of memory");
+    }
+    
+    uint32_t i;
+    uint32_t k;
+    for (i = 0, k = 0; k < dstlen; i += 1, k += 2) {
+        static const char hex[] = "0123456789abcdef";
+        uint8_t val = (uint8_t)(src[i]);
+        dst[k + 0] = hex[val >> 4];
+        dst[k + 1] = hex[val & 15];
+    }
+    
+    duk_push_lstring(ctx, dst, dstlen);
+    free(dst);
+    return 1;
+}
+
+int como__stringWrite (duk_context *ctx, enum Encodings encoding){
+    size_t obj_length;
+    duk_push_this(ctx);
+    void *obj_data = duk_require_buffer_data(ctx, -1, &obj_length);
+
+    //first argument must be a string
+    if (!duk_is_string(ctx, 0)){
+        duk_error(ctx, DUK_ERR_TYPE_ERROR, "Argument must be a string");
+    }
+
+    size_t length;
+    const char *str = duk_get_lstring(ctx, 0, &length);
+    (void) *str;
+    
+    if (encoding == HEX && length % 2 != 0){
+        duk_error(ctx, DUK_ERR_TYPE_ERROR, "Invalid hex string");
+    }
+
+    size_t offset;
+    size_t max_length;
+    size_t buflen;
+
+    CHECK_NOT_OOB(ParseArrayIndex(ctx, 1, 0, &offset));
+    CHECK_NOT_OOB(ParseArrayIndex(ctx, 2, obj_length - offset, &max_length));
+    
+    max_length = MIN(obj_length - offset, max_length);
+    buflen = max_length;
+
+    if (max_length == 0) {
+        duk_push_int(ctx, 0);
+        return 1;
+    }
+    
+    if (offset >= obj_length) {
+        duk_error(ctx, DUK_ERR_RANGE_ERROR, "Offset is out of bounds");
+    }
+
+    char *buf = obj_data + offset;
+
+    //get string as buffer
+    size_t nbytes = 0;
+    const char *data = duk_to_buffer(ctx, 0, &nbytes);
+    
+    int is_extern = nbytes == length;
+
+    if (nbytes > buflen) nbytes = buflen;
+    
+    if (is_extern){
+        printf("EXTERN\n");
+    }
+
+    // switch (encoding) {
+    // case ASCII:
+    // case BINARY:
+    // case BUFFER:
+    //     if (is_extern && str->IsOneByte()) {
+    //         memcpy(buf, data, nbytes);
+    //     } else {
+    //         uint8_t* const dst = reinterpret_cast<uint8_t*>(buf);
+    //         nbytes = str->WriteOneByte(dst, 0, buflen, flags);
+    //     }
+    //   if (chars_written != NULL)
+    //     *chars_written = nbytes;
+    //   break;
+
+    memcpy(buf, data, nbytes);
+
+    duk_push_uint(ctx, nbytes);
+    return 1;
+}
+
+COMO_METHOD(como_utf8_write) {
+    return como__stringWrite(ctx, UTF8);
+}
+
+COMO_METHOD(como_binary_write) {
+    return como__stringWrite(ctx, BINARY);
+}
+
+COMO_METHOD(como_buffer_string) {
+    enum Encodings encoding = duk_require_int(ctx, 1);
+    duk_pop(ctx);
+
+    size_t buflen;
+    duk_to_buffer(ctx, 0, &buflen);
+
+    //push offset
+    duk_push_int(ctx, 0);
+
+    //push max
+    duk_push_uint(ctx, buflen);
+
+    //stack 
+    return como__stringWrite(ctx, encoding);
+}
+
+COMO_METHOD(como_bytelength_utf8) {
+    duk_size_t len;
+    duk_to_buffer(ctx, 0, &len);
+    duk_push_uint(ctx, len);
+    return 1;
+}
+
+
 static const duk_function_list_entry como_buffer_funcs[] = {
-    { "slice", como_buffer_slice,     4 },
-    { "write", como_buffer_write,     5 },
-    { "fill", como_buffer_fill,       4 },
-    { "copy", como_buffer_copy,       5 },
-    { "create", como_buffer_create,   2 },
-    { "compare", como_buffer_compare, 2 },
-    { "foreach", como_buffer_foreach, 2 },
-    { NULL, NULL, 0 }
+    {"slice", como_buffer_slice,                   4},
+    {"write", como_buffer_write,                   5},
+    {"fill", como_buffer_fill,                     4},
+    {"copy", como_buffer_copy,                     5},
+    {"create", como_buffer_create,                 2},
+    {"compare", como_buffer_compare,               2},
+    {"foreach", como_buffer_foreach,               2},
+    {"ascii_decode", como_buffer_ascii_decode,     1},
+
+
+
+    //new
+    {"hexSlice", como_buffer_hex_slice,            2},
+    {"byteLengthUtf8", como_bytelength_utf8,       1},
+    {"utf8Write", como_utf8_write,                 3},
+    {"binaryWrite", como_binary_write,             3},
+    {"createFromString", como_buffer_string,       2},
+    {NULL, NULL,                                   0}
 };
 
 static const duk_number_list_entry como_buffer_constants[] = {
-    { "hex",    HEX    },
-    { "utf8",   UTF8   },
-    { "utf-8",  UTF8   },
-    { "ucs2" ,  UCS2   },
-    { "ascii",  ASCII  },
-    { "base64", BASE64 },
-    { "binary", BINARY },
-    { "buffer", BUFFER },
-    { "raw"   , RAW    },
-    { NULL,     0      }
+    {"hex", HEX             },
+    {"utf8", UTF8           },
+    {"utf-8", UTF8          },
+    {"ucs2" , UCS2          },
+    {"ascii", ASCII         },
+    {"base64", BASE64       },
+    {"binary", BINARY       },
+    {"buffer", BUFFER       },
+    {"raw", RAW             },
+    {NULL, 0                }
 };
 
 static int init_binding_buffer(duk_context *ctx) {

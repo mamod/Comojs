@@ -3,7 +3,7 @@ var errno  = process.binding('errno');
 var sock   = process.binding('socket');
 var ASSERT = require('assert');
 
-var TEST_PORT = 8080;
+var TEST_PORT = 9999;
 
 var write_cb_called = 0;
 var read_cb_called  = 0;
@@ -47,7 +47,7 @@ function connect_cb(status) {
 }
 
 function write_cb(status) {
-    ASSERT(status === 0);
+    ASSERT.equal(status, 0);
     write_cb_called++;
 }
 
@@ -66,7 +66,6 @@ function write_cb(status) {
     ASSERT(r == 0);
 
     var tcp_client = new uv.TCP();
-    ASSERT(r == 0);
 
     r = tcp_client.connect(addr, connect_cb);
     ASSERT(r == 0);

@@ -14,27 +14,23 @@ extern char **environ;
 
 /* ALL Bindings ar directly included from main.h */
 static const duk_function_list_entry bindings_funcs[] = {
-    { "threads"     , init_binding_threads,   0 },
-    { "worker"      , init_binding_worker,    0 },
-    { "buffer"      , init_binding_buffer,    0 },
-    { "loop"        , init_binding_loop,      0 },
-    { "socket"      , init_binding_socket,    0 },
-    { "http-parser" , init_binding_parser,    0 },
-    { "errno"       , init_binding_errno,     0 },
-    { "sys"         , init_binding_sys,       0 },
-    { "io"          , init_binding_io,        0 },
-    { "readline"    , init_binding_readline,  0 },
-    { "tty"         , init_binding_tty,       0 },
-    { "fs"          , init_binding_fs,        0 },
-    { "tls"         , init_binding_tls,       0 },
-    { "crypto"      , init_binding_crypto,    0 },
-    { "posix"       , init_binding_posix,     0 },
-    { NULL          , NULL, 0 }
+    { "threads"     , init_binding_threads,   0},
+    { "worker"      , init_binding_worker,    0},
+    { "buffer"      , init_binding_buffer,    0},
+    { "loop"        , init_binding_loop,      0},
+    { "socket"      , init_binding_socket,    0},
+    { "http-parser" , init_binding_parser,    0},
+    { "errno"       , init_binding_errno,     0},
+    { "sys"         , init_binding_sys,       0},
+    { "io"          , init_binding_io,        0},
+    { "tty"         , init_binding_tty,       0},
+    { "fs"          , init_binding_fs,        0},
+    { "tls"         , init_binding_tls,       0},
+    { "crypto"      , init_binding_crypto,    0},
+    { "posix"       , init_binding_posix,     0},
+    { NULL          , NULL,                   0}
 };
 
-/** 
-  * quick substring function for parsing ENV
-******************************************************************************/
 static char *_como_substring(char *string, int position, int length) {
     int c;
     char *pointer = malloc(length+1);
@@ -43,7 +39,7 @@ static char *_como_substring(char *string, int position, int length) {
         exit(EXIT_FAILURE);
     }
     
-    for (c = 0 ; c < position -1 ; c++) string++;
+    for (c = 0 ; c < position - 1 ; c++) string++;
     for (c = 0 ; c < length ; c++) {
         *(pointer+c) = *string;
         string++;
@@ -192,7 +188,7 @@ COMO_METHOD(como_process_exit) {
 /** 
   * process.dlOpen(shared_library);
 ******************************************************************************/
-COMO_METHOD(como_process_dllOpen) {
+COMO_METHOD(como_process_dlOpen) {
     const char *ModuleName = duk_get_string(ctx, 0);
 
     void * handle = dlopen(ModuleName, RTLD_LAZY);
@@ -222,17 +218,66 @@ COMO_METHOD(como_process_dllOpen) {
 }
 
 /** 
+  * process.getuid();
+  * process.setuid(string | number);
+  * process.getgid();
+******************************************************************************/
+#ifndef _WIN32
+static uid_t uid_by_name(const char* name) {
+    struct passwd pwd;
+    struct passwd* pp;
+    char buf[8192];
+
+    errno = 0;
+    pp = NULL;
+
+    if (getpwnam_r(name, &pwd, buf, sizeof(buf), &pp) == 0 && pp != NULL) {
+        return pp->pw_uid;
+    }
+
+    return -1;
+}
+#endif
+
+COMO_METHOD(como_process_getuid) {
+    #ifndef _WIN32
+    duk_push_uint(ctx, getuid());
+    #else
+    duk_push_undefined(ctx);
+    #endif
+    return 1;
+}
+
+COMO_METHOD(como_process_setuid) {
+    #ifndef _WIN32
+    if (duk_is_number(ctx, 0)){
+        int id = duk_get_int(ctx, 0);
+    } else if (duk_is_string(ctx, 0)){
+        const char *idname = duk_get_string(ctx, 0);
+    } else {
+        duk_error(ctx, DUK_ERR_TYPE_ERROR, "setuid accepts user id string or number");
+    }
+
+    #else
+    duk_push_undefined(ctx);
+    #endif
+    return 1;
+}
+
+/** 
   * process exported functions list
 ******************************************************************************/
 const duk_function_list_entry process_funcs[] = {
-    { "isFile"  , como_process_isFile, 1 },
-    { "readFile", como_process_readFile, 1 },
-    { "cwd"     , como_process_cwd, 0 },
-    { "eval"    , como_process_eval, 2 },
-    { "sleep"   , como_process_sleep, 1 },
-    { "dllOpen" , como_process_dllOpen, 2 },
-    { "exit"    , como_process_exit, 1 },
-    { NULL, NULL, 0 }
+    {"isFile", como_process_isFile,        1},
+    {"readFile", como_process_readFile,    1},
+    {"cwd", como_process_cwd,              0},
+    {"eval", como_process_eval,            2},
+    {"sleep", como_process_sleep,          1},
+    {"dlOpen", como_process_dlOpen,        2},
+    {"getuid", como_process_getuid,        0},
+    {"setuid", como_process_setuid,        1},
+    {"exit", como_process_exit,            1},
+    {NULL, NULL,                           0}
 };
 
 void como_init_process(int argc, char *argv[], duk_context *ctx) {

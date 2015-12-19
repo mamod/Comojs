@@ -35,7 +35,7 @@ function Process (options) {
 
     for (var i = 0; i < options.stdio_count; i++) {
         err = this.init_stdio(options.stdio[i], pipes[i], i);
-        if (err) throw new Error(err);
+        if (err) throw new Error("STDIO initiate error " + err);
     }
 
     this.status = 0;
@@ -67,6 +67,7 @@ function Process (options) {
         self.pipes = pipes;
         self.child_watcher = setInterval(function(){
             var exitcode = sys.GetExitCodeProcess(process_handle);
+            //still running
             if (exitcode === 259){
                 return;
             }
@@ -75,10 +76,7 @@ function Process (options) {
         }, 1);
     }
 
-    if (err){
-        throw new Error("spawn error");
-    }
-
+    if (err) throw new Error("spawn error");
     return this;
 }
 
@@ -88,7 +86,7 @@ Process.prototype.open_stream = function (container, pipefds, writable) {
         return 0;
     }
 
-    //already duplicated, and no more needed in parent
+    //already duplicated and no more needed in parent
     assert(sock.close(pipefds[0]), "closing child pipe");
     pipefds[0] = -1;
 
@@ -113,13 +111,14 @@ Process.prototype.child_init = function(options, stdio_count, pipes) {
         process_flags |= DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
     }
     
-    var studioHandles = [-1,-1,-1];
+    //initiate stdio handles
+    var stdioHandles = [-1,-1,-1];
 
     for (var fd = 0; fd < stdio_count; fd++) {
         var use_handle   = pipes[fd][2];
         if (use_handle > 0) {
             if (fd <= 2) {
-                studioHandles[fd] = use_handle;
+                stdioHandles[fd] = use_handle;
             } else {
                 // push @shared_handles, "$fd,$use_handle";
             }
@@ -136,7 +135,7 @@ Process.prototype.child_init = function(options, stdio_count, pipes) {
 
     // $ENV{NODE_WIN_HANDLES} = join "#", @shared_handles;
 
-    var processInfo = sys.CreateProcess(studioHandles[0], studioHandles[1], studioHandles[2]);
+    var processInfo = sys.CreateProcess(stdioHandles[0], stdioHandles[1], stdioHandles[2]);
     
     return processInfo;
     
@@ -152,18 +151,18 @@ Process.prototype.child_init = function(options, stdio_count, pipes) {
 Process.prototype.init_stdio = function (container, fds, i) {
     var mask = uv.IGNORE | uv.CREATE_PIPE | uv.INHERIT_FD | uv.INHERIT_STREAM;
     if (i <= 2) {
-    //     var nul = posix.open("NUL", i === 0 ? posix.O_RDONLY : posix.O_RDWR);
-    //     if (nul === null){
-    //         throw new Error("cant' create nul file : " + process.errno);
-    //     }
+        // var nul = posix.open("NUL", i === 0 ? posix.O_RDONLY : posix.O_RDWR);
+        // if (nul === null){
+        //     throw new Error("cant' create nul file : " + process.errno);
+        // }
 
-    //     //get win handle
-    //     var nul_handle = sys.GetOsFHandle( nul );
-    //     fds[2] = nul_handle;
-            fds[2] = -1;
-    //     assert(fds[2] !== null, "can't get win32 os fhandle");
+        // //get win handle
+        // var nul_handle = sys.GetOsFHandle( nul );
+        // fds[2] = nul_handle;
+        // assert(fds[2] !== null, "can't get win32 os fhandle");
+        fds[2] = -1;
     }
-    
+
     if (!container) return 0;
     switch (container.flags & mask){
         case uv.IGNORE : {
@@ -207,7 +206,7 @@ Process.prototype.init_stdio = function (container, fds, i) {
         }
 
         default : {
-            throw new Error("stream not supported");
+            throw new Error("unknown type");
         }
     }
 }

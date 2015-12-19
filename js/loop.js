@@ -10,15 +10,11 @@ exports.POLLHUP = loop.POLLHUP;
 function IOHandle (cb){
     this.cb = cb;
     this._handle = loop.handle_init(main_loop, cb);
-    this.type = loop.EV_IO;
+    // this.type = loop.EV_IO;
 }
 
 IOHandle.prototype.close = function(cb){
     loop.handle_close(this._handle, cb);
-};
-
-IOHandle.prototype.stop = function(events){
-    loop.io_stop(this._handle, events);
 };
 
 IOHandle.prototype.start = function(fd, events){
@@ -29,8 +25,12 @@ IOHandle.prototype.active = function(events){
     return loop.io_active(this._handle, events);
 };
 
-IOHandle.prototype.remove = function(events){
-    loop.io_remove(this._handle, events);
+IOHandle.prototype.stop = function(events){
+    loop.io_stop(this._handle, events);
+};
+
+IOHandle.prototype.handle_stop = function(){
+    loop.handle_stop(this._handle);
 };
 
 exports.io = function(cb){

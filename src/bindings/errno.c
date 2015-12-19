@@ -7,11 +7,21 @@ COMO_METHOD(como_errno_toString) {
 }
 
 static const duk_function_list_entry errno_funcs[] = {
-    { "toString", como_errno_toString, 1 },
-    { NULL, NULL, 0 }
+    {"toString", como_errno_toString,    1},
+    {NULL, NULL,                         0}
 };
 
 static const duk_number_list_entry errno_constants[] = {
+    { "EEXIST"             , EEXIST },
+    { "EISDIR"             , EISDIR },
+    { "ENOTDIR"            , ENOTDIR },
+    { "ENOENT"             , ENOENT },
+    { "ENOTEMPTY"          , ENOTEMPTY },
+    { "EPERM"              , EPERM },
+    { "ENOSPC"             , ENOSPC },
+    { "ENXIO"              , ENXIO },
+    { "EIO"                , EIO },
+    { "EROFS"              , EROFS },
     { "EADDRINUSE"         , EADDRINUSE },
     { "EACCES"             , EACCES },
     { "ENFILE"             , ENFILE  },
@@ -44,7 +54,6 @@ static const duk_number_list_entry errno_constants[] = {
 };
 
 static int init_binding_errno(duk_context *ctx) {
-    
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, errno_funcs);
     duk_put_number_list(ctx, -1, errno_constants);

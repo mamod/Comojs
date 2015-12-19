@@ -1,3 +1,5 @@
+#ifndef COMO_NO_TLS
+
 #include "mbedtls/config.h"
 #include "mbedtls/platform.h"
 
@@ -293,11 +295,11 @@ COMO_METHOD(como_tls_context_close) {
 }
 
 static const duk_function_list_entry como_tls_context_func[] = {
-    { "handshake"    , como_tls_context_handshake,   0 },
-    { "read"         , como_tls_context_read,        0 },
-    { "write"        , como_tls_context_write,       1 },
-    { "close"        , como_tls_context_close,       0 },
-    { NULL           , NULL, 0 }
+    { "handshake", como_tls_context_handshake,   0},
+    { "read", como_tls_context_read,             0},
+    { "write", como_tls_context_write,           1},
+    { "close", como_tls_context_close,           0},
+    { NULL, NULL,                                0}
 };
 
 /*=============================================================================
@@ -362,8 +364,8 @@ COMO_METHOD(como_tls_context) {
 }
 
 static const duk_function_list_entry como_tls_init_func[] = {
-    { "context",          como_tls_context,       1 },
-    { NULL               , NULL, 0 }
+    { "context", como_tls_context,            1},
+    { NULL, NULL,                             0}
 };
 
 duk_ret_t como_tls_finalizer(duk_context *ctx) {
@@ -533,6 +535,12 @@ COMO_METHOD(como_tls_init) {
     duk_push_null(ctx);
     return 1;
 }
+#else
+COMO_METHOD(como_tls_init) {
+    assert(0 && "como built without tls support");
+    return 1;
+}
+#endif //COMO_NO_TLS
 
 static const duk_function_list_entry como_tls_funcs[] = {
     { "init",               como_tls_init,          3 },

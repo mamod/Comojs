@@ -135,7 +135,6 @@ void como_sleep (int timeout){
 #include "bindings/socket.c"
 #include "bindings/io.c"
 #include "bindings/http-parser.c"
-#include "bindings/readline.c"
 #include "bindings/worker.c"
 #include "bindings/tty.c"
 #include "bindings/fs.c"

@@ -118,13 +118,11 @@ void loop_update_time (evLoop *loop);
 void handle_ref (evHandle *h);
 void handle_unref (evHandle *h);
 
-
 int timer_start (evHandle* handle,uint64_t timeout,uint64_t repeat);
 int timer_stop  (evHandle* handle);
 int timer_again (evHandle* handle);
 int timer_close (evHandle* handle);
 
-int io_remove (evHandle* handle, int mask);
 int io_add (evHandle* handle, int mask);
 int io_start (evHandle* handle, int fd, int mask);
 int io_stop (evHandle* handle, int mask);

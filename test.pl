@@ -2,17 +2,38 @@ use strict;
 use warnings;
 use File::Find;
 use File::Spec;
+use Data::Dumper;
 my $isWin = $^O =~ /win32/i;
 
-my $command = $isWin ? 'como ' : './como ';
+my $command = $isWin ? 'como ' : './como.sh ';
 my @tests;
 my @errors;
+
+print Dumper \@ARGV;
+
+
+my $testFolder = "./tests";
+
+if (@ARGV){
+    $testFolder .= "/" . $ARGV[0];
+}
+
 find(sub {
     if ($_ =~ m/\.js$/){
         my $file = $File::Find::name;
         push @tests, $file;
     }
-}, './tests');
+}, $testFolder);
+
+if (!$ARGV[0] || $testFolder =~ /uv/){
+    my $pid = fork();
+    die "can't fork echo server" if $pid == -1;
+    if ($pid == 0){
+        my $ret = system($command . "tests/uv/echo-server.js");
+        print $ret, "\n";
+        exit(0);
+    }
+}
 
 for my $test (@tests){
 
@@ -20,7 +41,8 @@ for my $test (@tests){
         next;
     }
 
-    if ($test =~ /uv/){
+    #ignore fixtures folder
+    if ($test =~ /fixtures/){
         next;
     }
 

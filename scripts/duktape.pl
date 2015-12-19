@@ -7,15 +7,15 @@ require 'helper.pl';
 
 my $dll;
 if ( isWin() ){
-	$dll = 'duktape.dll';
+    $dll = 'duktape.dll';
 } else {
-	$dll = 'libduktape.so';
+    $dll = 'libduktape.so';
 }
 
-my $duksource = getFile('../include/duktape/duktape.c');
+my $duksource = getFile('../libs/duktape/duktape.c');
 
 if (!-f $duksource){
-	die;
+    die;
 }
 
 print Dumper $duksource;

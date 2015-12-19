@@ -6,31 +6,58 @@ use File::Copy;
 use lib './scripts';
 require 'helper.pl';
 
+my %compileOptions;
+my $options = '';
+for (@ARGV){
+    if ($_ =~ /^-D/){
+        $options .= $_ . " ";
+        $compileOptions{$_} = 1;
+    }
+}
+
+my $cc = "gcc";
+
+#FIXME: building ansi.c seperately
+#since it produce errors
+#maybe we need to write our own
 if (isWin()){
-    system("gcc -c -w include/ansi/ANSI.c");
+    system("$cc -c -w libs/ansi/ANSI.c");
 }
 
 my @files = (
-    getFile("../include/duktape/duktape.c"),
-    getFile("../include/thread/tinycthread.c"),
-    getFile("../include/http/http_parser.c"),
-    getFile("../src/loop/core.c"),
+    getFile("../libs/duktape/duktape.c"),
+    getFile("../libs/http/http_parser.c"),
+    getFile("../src/loop/core.c")
 );
 
-my $mbedFolder = '../include/mbedtls/';
-opendir(DIR, getFile( $mbedFolder . 'library')) or die $!;
-while (my $file = readdir(DIR)) {
-    next if ($file eq "." || $file eq ".." || $file eq "mbedtls");
-    my $f = getFile( $mbedFolder . 'library/' . $file);
-    push @files, $f;
+if (!$compileOptions{'-DCOMO_NO_THREADS'}){
+    push @files, getFile("../libs/thread/tinycthread.c");
+}
+
+#tls is not supported
+my $mbedFolder = '../libs/mbedtls/';
+if (!$compileOptions{'-DCOMO_NO_TLS'}){
+    opendir(DIR, getFile( $mbedFolder . 'library')) or die $!;
+    while (my $file = readdir(DIR)) {
+        next if ($file eq "." || $file eq ".." || $file eq "mbedtls");
+        my $f = getFile( $mbedFolder . 'library/' . $file);
+        push @files, $f;
+    }
+} else {
+    #if no tls support we still need some crypto & hashing
+    push @files, getFile($mbedFolder . "library/md5.c");
+    push @files, getFile($mbedFolder . "library/sha1.c");
+    push @files, getFile($mbedFolder . "library/sha256.c");
+    push @files, getFile($mbedFolder . "library/sha512.c");
 }
 
 my $build = join ' ', @files;
 
-my $buildStr = "gcc -Wall -Werror -Wno-missing-braces"
-             . " -I./include"
-             . " -I./include/mbedtls/library"
+my $buildStr = "$cc -Wall -Werror -Wno-missing-braces"
+             . " -I./libs"
+             . " -I./libs/mbedtls/library"
              . " -L."
+             . ($options ? " " . $options : "")
              . " " . $build
              . " -o como" . (isWin() ? ".exe" : "");
             if (isWin()){
@@ -46,8 +73,8 @@ my $buildStr = "gcc -Wall -Werror -Wno-missing-braces"
             }
 
 # my $buildStr = "gcc -Wall -Werror -Wno-missing-braces -shared "
-#              . " -I./include"
-#              . " -I./include/mbedtls/library"
+#              . " -I./libs"
+#              . " -I./libs/mbedtls/library"
 #              . " -L."
 #              . " " . $build
 #              . " -o como" . (isWin() ? ".dll" : ".so");

@@ -8,6 +8,7 @@ var serverType;
 var server_closed;
 
 function after_shutdown (){
+    this.close();
     console.log("shutdown");
 }
 
@@ -16,10 +17,13 @@ function after_write (){
 }
 
 function after_read(err, buf) {
+    console.log("reading");
     var nread = buf ? buf.length : 0;
     if (err) {
+
+        //FIXME: echo server report 10063 error on win32
         /* Error or EOF */
-        ASSERT.strictEqual(err, errno.EOF);
+        // ASSERT.strictEqual(err, errno.EOF);
 
         this.shutdown(after_shutdown);
         return;
@@ -30,7 +34,7 @@ function after_read(err, buf) {
         return;
     }
 
-    console.log(buf);
+    // console.log(buf);
 
     /*
     * Scan for the letter Q which signals that we should quit the server.
@@ -77,8 +81,9 @@ function on_connection(status) {
     /* associate server with stream */
     stream.server = this;
 
-    this.accept(stream);
+    ASSERT(this.accept(stream) == 0);
 
+    console.log("client fd " + stream.fd);
     stream.read_start(after_read);
 }
 

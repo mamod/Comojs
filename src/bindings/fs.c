@@ -26,15 +26,6 @@ COMO_METHOD(como_fs_fstat) {
         duk_push_int(ctx, st.st_size);
         duk_put_prop_string(ctx, -2, "size");
 
-        duk_push_int(ctx, st.st_mtime);
-        duk_put_prop_string(ctx, -2, "mtime");
-
-        duk_push_int(ctx, st.st_atime);
-        duk_put_prop_string(ctx, -2, "atime");
-
-        duk_push_int(ctx, st.st_ctime);
-        duk_put_prop_string(ctx, -2, "ctime");
-
         duk_push_int(ctx, st.st_mode);
         duk_put_prop_string(ctx, -2, "mode");
 
@@ -43,6 +34,15 @@ COMO_METHOD(como_fs_fstat) {
 
         duk_push_int(ctx, st.st_gid);
         duk_put_prop_string(ctx, -2, "gid");
+
+        duk_push_int(ctx, st.st_mtime);
+        duk_put_prop_string(ctx, -2, "mtime");
+
+        duk_push_int(ctx, st.st_atime);
+        duk_put_prop_string(ctx, -2, "atime");
+
+        duk_push_int(ctx, st.st_ctime);
+        duk_put_prop_string(ctx, -2, "ctime");
     } else {
         COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_ERROR);
     }
@@ -57,18 +57,9 @@ COMO_METHOD(como_fs_stat) {
 
     if (stat(file, &st) == 0) {
         duk_push_object(ctx);
-        
-        duk_push_int(ctx, st.st_size);
-        duk_put_prop_string(ctx, -2, "size");
 
-        duk_push_int(ctx, st.st_mtime);
-        duk_put_prop_string(ctx, -2, "mtime");
-
-        duk_push_int(ctx, st.st_atime);
-        duk_put_prop_string(ctx, -2, "atime");
-
-        duk_push_int(ctx, st.st_ctime);
-        duk_put_prop_string(ctx, -2, "ctime");
+        duk_push_uint(ctx, st.st_dev);
+        duk_put_prop_string(ctx, -2, "dev");
 
         duk_push_int(ctx, st.st_mode);
         duk_put_prop_string(ctx, -2, "mode");
@@ -78,6 +69,41 @@ COMO_METHOD(como_fs_stat) {
 
         duk_push_int(ctx, st.st_gid);
         duk_put_prop_string(ctx, -2, "gid");
+
+        duk_push_int(ctx, st.st_rdev);
+        duk_put_prop_string(ctx, -2, "rdev");
+
+        duk_push_int(ctx, st.st_nlink);
+        duk_put_prop_string(ctx, -2, "nlink");
+
+        duk_push_int(ctx, st.st_size);
+        duk_put_prop_string(ctx, -2, "size");
+
+        #ifdef _WIN32
+        duk_push_undefined(ctx);
+        #else
+        duk_push_int(ctx, st.st_blksize);
+        #endif
+        duk_put_prop_string(ctx, -2, "blksize");
+
+        #ifdef _WIN32
+        duk_push_undefined(ctx);
+        #else
+        duk_push_int(ctx, st.st_blocks);
+        #endif
+        duk_put_prop_string(ctx, -2, "blocks");
+
+        duk_push_uint(ctx, st.st_ino);
+        duk_put_prop_string(ctx, -2, "ino");
+
+        duk_push_int(ctx, st.st_atime);
+        duk_put_prop_string(ctx, -2, "atime");
+
+        duk_push_int(ctx, st.st_ctime);
+        duk_put_prop_string(ctx, -2, "ctime");
+
+        duk_push_int(ctx, st.st_mtime);
+        duk_put_prop_string(ctx, -2, "mtime");
     } else {
         COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_ERROR);
     }

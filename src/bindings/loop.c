@@ -11,7 +11,7 @@ evLoop *como_main_loop(duk_context *ctx) {
 
 static int como_loop_handle_close(duk_context *ctx);
 
-static int _handle_close_callback (evHandle *handle) {
+static int como__handle_close_callback (evHandle *handle) {
 
     duk_context *ctx = handle->loop->data;
 
@@ -39,7 +39,7 @@ static int _handle_close_callback (evHandle *handle) {
     return 1;
 }
 
-static int _handle_dispatch_cb (evHandle *handle, int mask){
+static int como__handle_dispatch_cb (evHandle *handle, int mask){
 
     duk_context *ctx = handle->loop->data;
 
@@ -116,7 +116,7 @@ COMO_METHOD(como_loop_run) {
 COMO_METHOD(como_loop_handle_init) {
     evLoop *loop      = duk_require_pointer(ctx, 0);
 
-    evHandle *handle  = handle_init(loop, _handle_dispatch_cb);
+    evHandle *handle  = handle_init(loop, como__handle_dispatch_cb);
     int64_t handle_id = handle->id;
 
     duk_push_global_stash(ctx);
@@ -218,7 +218,7 @@ COMO_METHOD(como_loop_handle_close) {
         duk_push_sprintf(ctx, "close_%lf", (double) handle->id);
         duk_dup(ctx, 1);
         duk_put_prop(ctx, -3); /* comoHandles[close_handle_id] = callback */
-        handle->close = (void *)_handle_close_callback;
+        handle->close = (void *)como__handle_close_callback;
     } else {
         /* remove handle reference from global stash */
         duk_push_global_stash(ctx);
@@ -245,6 +245,16 @@ COMO_METHOD(como_loop_timer_start) {
     int repeat       = duk_get_int(ctx, 2);
 
     timer_start(handle, timeout, repeat);
+    return 1;
+}
+
+/*=============================================================================
+  stop timer
+  loop.timer_stop(handle);
+ ============================================================================*/
+COMO_METHOD(como_loop_timer_stop) {
+    evHandle *handle = duk_require_pointer(ctx, 0);
+    timer_stop(handle);
     return 1;
 }
 
@@ -284,13 +294,6 @@ COMO_METHOD(como_loop_io_stop) {
     return 1;
 }
 
-COMO_METHOD(como_loop_io_remove) {
-    evHandle *handle = duk_require_pointer(ctx, 0);
-    int event = duk_get_int(ctx, 1);
-    io_remove(handle, event);
-    return 1;
-}
-
 /*=============================================================================
   io active : check if io handle is active for the given event
   loop.io_active(handle, event); => 1 if active 0 otherwise
@@ -315,34 +318,32 @@ COMO_METHOD(como_loop_update_time) {
 }
 
 static const duk_function_list_entry loop_funcs[] = {
-    { "init", como_loop_init, 0 },
-    { "main", como_loop_main, 0 },
-    { "run", como_loop_run,   2 },
+    {"init", como_loop_init,                    0},
+    {"main", como_loop_main,                    0},
+    {"run", como_loop_run,                      2},
 
     /* handle functions */
-    { "handle_init",    como_loop_handle_init,   2 },
-    { "handle_unref",   como_loop_handle_unref,  1 },
-    { "handle_ref",     como_loop_handle_ref,    1 },
-    { "handle_stop",    como_loop_handle_stop,   1 },
-    { "handle_start",   como_loop_handle_start,  1 },
-    { "handle_close",   como_loop_handle_close,  2 },
-    { "handle_call",    como_loop_handle_call,   1 },
-    { "handle_wrap",    como_loop_handle_wrap,   2 },
-    { "handle_unwrap",  como_loop_handle_unwrap, 1 },
+    {"handle_init",    como_loop_handle_init,   2},
+    {"handle_unref",   como_loop_handle_unref,  1},
+    {"handle_ref",     como_loop_handle_ref,    1},
+    {"handle_stop",    como_loop_handle_stop,   1},
+    {"handle_start",   como_loop_handle_start,  1},
+    {"handle_close",   como_loop_handle_close,  2},
+    {"handle_call",    como_loop_handle_call,   1},
+    {"handle_wrap",    como_loop_handle_wrap,   2},
+    {"handle_unwrap",  como_loop_handle_unwrap, 1},
 
     /* timer functions */
-    { "timer_start", como_loop_timer_start, 3},
-    { "timer_again", como_loop_timer_again, 1},
-    { "update_time", como_loop_update_time, 1},
+    {"timer_start", como_loop_timer_start,      3},
+    {"timer_stop", como_loop_timer_stop,        1},
+    {"timer_again", como_loop_timer_again,      1},
+    {"update_time", como_loop_update_time,      1},
 
     /* io functions */
-    { "io_start",  como_loop_io_start,      3 },
-    { "io_stop",   como_loop_io_stop,       2 },
-    { "io_remove", como_loop_io_remove,     2 },
-    { "io_active", como_loop_io_active,     2 },
-    
-    
-    { NULL, NULL, 0 }
+    {"io_start",  como_loop_io_start,           3},
+    {"io_stop",   como_loop_io_stop,            2},
+    {"io_active", como_loop_io_active,          2},
+    {NULL, NULL,                                0}
 };
 
 static const duk_number_list_entry loop_constants[] = {

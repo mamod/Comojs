@@ -556,6 +556,38 @@ COMO_METHOD(como_sock_recv) {
 }
 
 /*=============================================================================
+  recv
+ ============================================================================*/
+//FIXME: this is really ugly
+//use push_fixed_buffer instead
+COMO_METHOD(como_sock_read) {
+    SOCKET fd  = duk_require_int(ctx, 0);
+    size_t len = (size_t)duk_require_int(ctx, 1);
+
+    char *buf = malloc(sizeof(char)*len);
+    if (buf == NULL){
+        assert(0 && "can't allocate memory for recieveing data");
+    }
+
+    size_t nread;
+    do {
+        nread = read(fd, buf, len);
+    } while (nread < 0 && COMO_GET_LAST_WSA_ERROR == SOCKEINTR);
+
+    if (nread == -1){
+        free(buf);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
+    } else if (nread == 0){
+        free(buf);
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMOEOF);
+    }
+    
+    duk_push_lstring(ctx, buf, nread);
+    free(buf);
+    return 1;
+}
+
+/*=============================================================================
   read into buffer
 
   ex:
@@ -601,10 +633,44 @@ COMO_METHOD(como_sock_send) {
 
     /* do not allow to exceed string size when sending */
     if (len > length) len = length;
+    else if (len == -1) len = length;
     
     size_t n;
     do {
         n = send(fd, buf, len, flags);
+    } while (n == -1 && errno == SOCKEINTR);
+
+    if (n == -1){
+        COMO_SET_ERRNO_AND_RETURN(ctx, COMO_GET_LAST_WSA_ERROR);
+    }
+
+    duk_push_number(ctx, (double)n);
+    return 1;
+}
+
+/*=============================================================================
+  write (string/buffer)
+ ============================================================================*/
+COMO_METHOD(como_sock_write) {
+    SOCKET fd       = duk_require_int(ctx, 0);
+    const char *buf;
+    size_t length;
+
+    if (duk_get_type(ctx, 1) == DUK_TYPE_BUFFER){
+        buf = duk_get_buffer(ctx, 1, &length);
+    } else {
+        buf = duk_require_lstring(ctx, 1, &length);
+    }
+
+    size_t len      = (size_t)duk_require_int(ctx, 2);
+
+    /* do not allow to exceed string size when sending */
+    if (len > length) len = length;
+    else if (len == -1) len = length;
+
+    size_t n;
+    do {
+        n = write(fd, buf, len);
     } while (n == -1 && errno == SOCKEINTR);
 
     if (n == -1){
@@ -717,34 +783,36 @@ COMO_METHOD(como_host_to_ip) {
   socket export functions list
  ============================================================================*/
 static const duk_function_list_entry como_socket_funcs[] = {
-    { "pton4"          , como_sock_inet_pton4, 2 },
-    { "pton6"          , como_sock_inet_pton6, 2 },
-    { "pton"           , como_sock_inet_pton, 2 },
-    { "ntop4"          , como_sock_inet_ntop4, 1 },
-    { "ntop6"          , como_sock_inet_ntop6, 1 },
-    { "ntop"           , como_sock_inet_ntop, 1 },
-    {"host_to_ip"      , como_host_to_ip, 2},
-    { "socket"         , como_sock_socket, 3 },
-    { "setsockopt"     , como_sock_setsockopt, 4 },
-    { "getsockopt"     , como_sock_getsockopt, 3 },
-    { "bind"           , como_sock_bind, 2 },
-    { "listen"         , como_sock_listen, 2 },
-    { "connect"        , como_sock_connect, 3 },
-    { "accept"         , como_sock_accept, 1 },
-    { "nonblock"       , como_sock_nonblock, 2 },
-    { "recv"           , como_sock_recv, 3},
-    {"readIntoBuffer"  , como_sock_readIntoBuffer, 3},
-    { "send"           , como_sock_send, 4},
-    { "shutdown"       , como_sock_shutdown,2 },
-    { "close"          , como_sock_close, 1 },
-    { "getprotobyname" , como_sock_getprotobyname, 1},
-    { "getpeername"    , como_sock_getpeername, 1},
-    { "getsockname"    , como_sock_getsockname, 1},
-    { "isIP"           , como_sock_isIP, 1},
-    { "family"         , como_sock_get_family, 1 },
-    { "addr_info"      , como_sock_address_info, 1 },
-    { "socketpair"     , como_sock_socketpair, 0},
-    { NULL         , NULL, 0 }
+    {"pton4"          , como_sock_inet_pton4, 2},
+    {"pton6"          , como_sock_inet_pton6, 2},
+    {"pton"           , como_sock_inet_pton, 2},
+    {"ntop4"          , como_sock_inet_ntop4, 1},
+    {"ntop6"          , como_sock_inet_ntop6, 1},
+    {"ntop"           , como_sock_inet_ntop, 1},
+    {"host_to_ip"     , como_host_to_ip, 2},
+    {"socket"         , como_sock_socket, 3},
+    {"setsockopt"     , como_sock_setsockopt, 4},
+    {"getsockopt"     , como_sock_getsockopt, 3},
+    {"bind"           , como_sock_bind, 2},
+    {"listen"         , como_sock_listen, 2},
+    {"connect"        , como_sock_connect, 3},
+    {"accept"         , como_sock_accept, 1},
+    {"nonblock"       , como_sock_nonblock, 2},
+    {"recv"           , como_sock_recv, 3},
+    {"read"           , como_sock_read, 2},
+    {"readIntoBuffer" , como_sock_readIntoBuffer, 3},
+    {"send"           , como_sock_send, 4},
+    {"write"          , como_sock_write, 3},
+    {"shutdown"       , como_sock_shutdown, 2},
+    {"close"          , como_sock_close, 1},
+    {"getprotobyname" , como_sock_getprotobyname, 1},
+    {"getpeername"    , como_sock_getpeername, 1},
+    {"getsockname"    , como_sock_getsockname, 1},
+    {"isIP"           , como_sock_isIP, 1},
+    {"family"         , como_sock_get_family, 1},
+    {"addr_info"      , como_sock_address_info, 1},
+    {"socketpair"     , como_sock_socketpair, 0},
+    {NULL         , NULL, 0}
 };
 
 /*=============================================================================

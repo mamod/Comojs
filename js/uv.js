@@ -1,6 +1,7 @@
 var sock   = process.binding('socket');
 var sys    = process.binding('sys');
 var posix  = process.binding('posix');
+var errno  = process.binding('errno');
 var isWin  = process.platform === 'win32';
 var assert = require('assert');
 
@@ -30,6 +31,9 @@ exports.PROCESS_SETGID       = (1 << 1);
 exports.PROCESS_DETACHED     = (1 << 3);
 exports.PROCESS_WINDOWS_HIDE = (1 << 4);
 exports.PROCESS_WINDOWS_VERBATIM_ARGUMENTS = (1 << 2);
+exports.EOF = -4095;
+
+exports.isWin = isWin;
 
 exports.socket = function(domain, type, protocol) {
     var sockfd, err;
@@ -123,7 +127,7 @@ exports.stdio_container = function(count){
 exports.close = function(fd) {
 
     assert(fd > -1);  /* Catch uninitialized io_watcher.fd bugs. */
-    // assert(fd > STDERR_FILENO);  /* Catch stdio close bugs. */
+    assert(fd > 2);  /* Catch stdio close bugs. */
 
     var saved_errno = process.errno;
 
@@ -141,6 +145,24 @@ exports.close = function(fd) {
 
     return rc;
 };
+
+
+var _write = isWin ? sock.send : sock.write;
+var _read  = isWin ? sock.recv : sock.read;
+
+exports.write = function(fd, buf, len, flag){
+    return _write(fd, buf, len);
+};
+
+exports.read = function(fd, len){
+    return _read(fd, len);
+};
+
+exports.cloexec  = sys.cloexec;
+exports.nonblock = sock.nonblock;
+
+exports.O_RDWR  = posix.O_RDWR;
+exports.open    = posix.open;
 
 var uvProcess  = require('./uv/process.js');
 

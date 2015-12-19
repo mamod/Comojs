@@ -106,6 +106,9 @@ Console.prototype.assert = function(expression) {
   }
 };
 
+var std = {
+  write : print
+};
 
-module.exports = new Console(process.stdout, process.stderr);
+module.exports = new Console(std, std);
 module.exports.Console = Console;

@@ -1,9 +1,9 @@
-
 var sock    = process.binding('socket');
-var io      = require('io');
 var uv      = require('uv');
 exports.TCP = TCP;
 exports.TCPConnectWrap = TCPConnectWrap;
+
+var MakeCallback = process.MakeCallback;
 
 function TCPConnectWrap (){}
 
@@ -23,12 +23,10 @@ TCP.prototype.bind6 = TCP.prototype.bind = function(ip, port){
 };
 
 TCP.prototype.close = function(cb){
-    if (this.reading || this.owner) {
-        this._handle.close(cb);
-    } else {
-        //TODO: need to free resources here
-        sock.close(this._handle.fd);
-    }
+    var tcp = this;
+    process.nextTick(function(){
+        tcp._handle.close(cb);
+    });
 };
 
 TCP.prototype.listen = function(backlog){
@@ -40,7 +38,8 @@ TCP.prototype.listen = function(backlog){
             client = new TCP();
             this.accept(client._handle);
         }
-        tcp.onconnection(status, client);
+        MakeCallback(tcp, "onconnection", status, client);
+        // tcp.onconnection(status, client);
     });
 };
 
@@ -49,12 +48,13 @@ TCP.prototype.readStart = function(){
     this._handle.read_start(function(err, buf){
         var len;
         if (err){
-            len = err;
+            len = err > 0 ? -err : err;
         } else if (buf){
             len = buf.length;
         } else { len = 0; }
 
-        tcp.onread(len, buf);
+        MakeCallback(tcp, "onread", len, buf);
+        // tcp.onread(len, buf);
     });
 };
 
@@ -64,13 +64,25 @@ TCP.prototype.readStop = function(){
 
 TCP.prototype.shutdown = function(req){
     var tcp = this;
-    this._handle.shutdown(function(){
-        req.oncomplete(0, tcp, req);
+    this._handle.shutdown(function(status){
+        MakeCallback(req, "oncomplete", status, tcp, req);
+        // req.oncomplete(0, tcp, req);
     });
 };
 
+TCP.prototype.writeBinaryString = function(req, data){
+    data = Buffer(data, "binary");
+    return this.writeUtf8String(req, data.toString("binary"));
+};
+
 TCP.prototype.writeBuffer = TCP.prototype.writeUtf8String = function(req, data){
-    this._handle.write(data);
+    var tcp = this;
+    this._handle.write(data, function(status){
+        tcp.writeQueueSize = tcp._handle.write_queue_size;
+        req.bytes = this.bytes;
+        MakeCallback(req, "oncomplete", status, tcp, req, 0);
+    });
+    
     return 0;
 };
 
@@ -80,10 +92,10 @@ TCP.prototype.connect = function(req_wrap_obj, ip_address, port){
     if (addr === null){
         return process.errno;
     }
-
-    // var req_wrap = new TCPConnectWrap(req_wrap_obj);
+    
     var err = this._handle.connect(addr, function AfterConnect (status){
-        req_wrap_obj.oncomplete(status, tcp, req_wrap_obj, true, true);
+        MakeCallback(req_wrap_obj, "oncomplete", status, tcp, req_wrap_obj, true, true);
+        //req_wrap_obj.oncomplete(status, tcp, req_wrap_obj, true, true);
     });
     return err;
 };

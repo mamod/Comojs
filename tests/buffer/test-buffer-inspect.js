@@ -25,13 +25,14 @@ var assert = require('assert');
 var util = require('util');
 
 var buffer = require('buffer').Buffer;
+var slowbuffer = require('buffer').SlowBuffer;
 
 buffer.INSPECT_MAX_BYTES = 2;
 
 var b = Buffer(4);
 b.fill('1234');
 
-var s = Buffer.SlowBuffer(4);
+var s = slowbuffer(4);
 s.fill('1234');
 
 var expected = '<Buffer 31 32 ... >';
@@ -42,7 +43,7 @@ assert.strictEqual(util.inspect(s), expected);
 b = Buffer(2);
 b.fill('12');
 
-s = Buffer.SlowBuffer(2);
+s = slowbuffer(2);
 s.fill('12');
 
 expected = '<Buffer 31 32>';

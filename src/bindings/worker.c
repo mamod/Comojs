@@ -1,3 +1,4 @@
+#ifndef COMO_NO_THREADS
 #include "../loop/queue.h"
 
 typedef struct {
@@ -187,7 +188,7 @@ COMO_METHOD(como_worker_init) {
     duk_get_prop_string(ctx, -1, "comoWorkersCallBack");
     duk_push_number(ctx, (double) handle_id);
     duk_dup(ctx, 2);
-    duk_put_prop(ctx, -3); /* comoHandles[handle_id] = callback */
+    duk_put_prop(ctx, -3); /* comoWorkersCallBack[handle_id] = callback */
 
     mtx_init(&worker->mtx, mtx_plain);
     
@@ -275,8 +276,10 @@ static const duk_function_list_entry como_worker_funcs[] = {
     { "destroyWorker",       como_destroy_worker,         2 },
     { NULL,                 NULL,                         0 }
 };
+#endif //COMO_NO_THREADS
 
 static int init_binding_worker(duk_context *ctx) {
+    #ifndef COMO_NO_THREADS
     duk_push_global_stash(ctx);
     duk_push_object(ctx);
     duk_put_prop_string(ctx, -2, "comoWorkersCallBack");
@@ -284,5 +287,6 @@ static int init_binding_worker(duk_context *ctx) {
 
     duk_push_object(ctx);
     duk_put_function_list(ctx, -1, como_worker_funcs);
+    #endif
     return 1;
 }

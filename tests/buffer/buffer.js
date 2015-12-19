@@ -22,7 +22,7 @@
 
 var assert = require('assert');
 var Buffer = require('buffer').Buffer;
-var SlowBuffer = Buffer.SlowBuffer;
+var SlowBuffer = require('buffer').SlowBuffer;
 
 //var smalloc = require('smalloc');
 

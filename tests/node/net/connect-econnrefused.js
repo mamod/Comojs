@@ -1,9 +1,7 @@
 'use strict';
 // verify that connect reqs are properly cleaned up
 
-var common = {
-  PORT : 9090
-};
+var common = require('../common.js');
 
 var assert = require('assert');
 var net = require('net');
@@ -31,16 +29,16 @@ function pummel() {
 }
 
 function check() {
-  // setTimeout(function() {
-  //   assert.equal(process._getActiveRequests().length, 0);
-  //   assert.equal(process._getActiveHandles().length, 1); // the timer
-  //   check_called = true;
-  // }, 0);
+  setTimeout(function() {
+    // assert.equal(process._getActiveRequests().length, 0);
+    // assert.equal(process._getActiveHandles().length, 1); // the timer
+    check_called = true;
+  }, 0);
 }
 var check_called = false;
 
 process.on('exit', function() {
   assert.equal(rounds, ROUNDS);
   assert.equal(reqs, ROUNDS * ATTEMPTS_PER_ROUND);
-  // assert(check_called);
+  assert(check_called);
 });

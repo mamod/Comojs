@@ -45,19 +45,13 @@ if (typeof Number.isFinite !== 'function') {
         print(e.stack || e);
         process.exit(1);
     };
-    
-    process.nextTick = function (fn, a, b, c, d){
-        setTimeout(function(){
-            fn(a, b, c, d);
-        }, 1);
-    };
-    
+
     process.moduleLoadList = [];
     var binding_modules = process.bindings;
     delete process.bindings; //clean up
 
     var cached_bindings = {};
-    var wrap_test       = /wrap/i;
+    var wrap_test       = /_wrap/i;
     process.binding = function (name){
         if ( wrap_test.test(name) || name === 'uv' ){
             var r = NativeModule.require('module');
@@ -70,26 +64,17 @@ if (typeof Number.isFinite !== 'function') {
         if (!binding_fun) {
             throw new Error('unknown binding name ' + name);
         }
-        
+
         if (!cached_bindings[name]) {
             cached_bindings[name] = binding_fun();
         }
         return cached_bindings[name];
     };
-    
+
     process.MakeCallback = function (handle, string, a, b, c, d, e) {
+        // process._tickCallBack();
         if (!handle[string]) return;
         handle[string](a, b, c, d, e);
-    };
-
-    //FIXME: quick dummy bench implementation
-    var _startTime = 0;
-    process.benchStart = function (){
-        _startTime = Date.now();
-    };
-
-    process.benchEnd = function(){
-        console.log("Bench End : " + (Date.now() - _startTime) );
     };
 
     function startup () {
@@ -98,7 +83,7 @@ if (typeof Number.isFinite !== 'function') {
         if (process.argv[0] == 'src/main.c') {
             process.argv[0] = 'como.bat';
         }
-        
+
         var EventEmitter = NativeModule.require('events').EventEmitter;
         process.__proto__ = Object.create(EventEmitter.prototype, {
             constructor: {
@@ -111,13 +96,77 @@ if (typeof Number.isFinite !== 'function') {
         var path = NativeModule.require('path');
         var execPath = path.resolve(process.cwd() + '/' + process.argv[0]);
         process.execPath = execPath;
-        
+        global.DUK_Buffer = Buffer;
         global.Buffer = NativeModule.require('buffer').Buffer;
+        startup.nextTick();
         startup.globalTimeouts();
         // startup.processStdio();
         startup.globalConsole();
-        
     }
+
+    startup.nextTick = function(){
+        var nextTickQueue = [];
+
+        var kLength   = 0;
+        var kIndex    = 0;
+        var tock, callback, args;
+
+        var tickDone = function(){
+            if (kLength !== 0) {
+                if (kLength <= kIndex) {
+                    nextTickQueue = [];
+                    nextTickQueue.length = 0;
+                    kLength = 0;
+                } else {
+                    nextTickQueue.splice(0, kIndex);
+                    kLength = nextTickQueue.length;
+                }
+            }
+            kIndex = 0;
+        };
+
+        var slice = Array.prototype.slice;
+        process.nextTick = function (){
+            var args = slice.call(arguments);
+            var callback = args.shift();
+
+            // on the way out, don't bother. it won't get fired anyway.
+            if (process._exiting) return;
+
+            // if (kLength > 500){
+            //     process._tickCallBack();
+            // }
+            
+            kLength++;
+            nextTickQueue.push({
+                callback : callback,
+                args     : args
+            });
+        };
+
+        process._tickCallBack = function(){
+            while (kIndex < kLength){
+                var tock = nextTickQueue[kIndex++];
+                var callback = tock.callback;
+                var args = tock.args;
+                var threw = true;
+                try {
+                    switch(args.length){
+                        case 0  : callback(); break;
+                        case 1  : callback(args[0]); break;
+                        case 2  : callback(args[0], args[1]); break;
+                        case 3  : callback(args[0], args[1], args[2]); break;
+                        case 4  : callback(args[0], args[1], args[2], args[3]); break;
+                        default : callback.apply(null, args);
+                    }
+                    threw = false;
+                } finally {
+                    if (threw) tickDone();
+                }
+            }
+            tickDone();
+        };
+    };
 
     startup.globalTimeouts = function() {
         var loop = process.binding('loop');
@@ -130,14 +179,14 @@ if (typeof Number.isFinite !== 'function') {
             loop.timer_start(h, timeout, 0);
             return fn;
         };
-        
+
         global.setInterval = function(fn, timeout) {
             var h = loop.handle_init(_default, fn);
             fn.timerHandle = h;
             loop.timer_start(h, timeout, timeout);
             return fn;
         };
-        
+
         global.clearTimeout = global.clearInterval = function(timer) {
             if (!timer.timerHandle){
                 throw new Error("clearing Timer Error");
@@ -145,12 +194,12 @@ if (typeof Number.isFinite !== 'function') {
             loop.handle_close(timer.timerHandle);
             timer.timerHandle = null;
         };
-        
+
         global.setImmediate = function() {
             var t = NativeModule.require('timers');
             return t.setImmediate.apply(this, arguments);
         };
-        
+
         global.clearImmediate = function() {
             var t = NativeModule.require('timers');
             return t.clearImmediate.apply(this, arguments);
@@ -158,9 +207,6 @@ if (typeof Number.isFinite !== 'function') {
     };
 
     startup.globalConsole = function() {
-        process.stdout = {
-            write : print
-        };
         global.console = NativeModule.require('console');
     };
 
@@ -187,7 +233,7 @@ if (typeof Number.isFinite !== 'function') {
         });
 
         //stderr
-        process.__defineGetter__('stderr2', function() {
+        process.__defineGetter__('stderr', function() {
             if (stderr) return stderr;
             stderr = stdio.createWritableStdioStream(2);
             stderr.destroy = stderr.destroySoon = function(er) {
@@ -217,17 +263,12 @@ if (typeof Number.isFinite !== 'function') {
         this.exports = {};
         this.loaded = false;
     }
-    
+
     NativeModule._source = {
         //core modules
         loop        : 'js/loop.js',
-        util        : 'js/util.js',
-        console     : 'js/console.js',
-        path        : 'js/path.js',
-        assert      : 'js/assert.js',
-        url         : 'js/url.js',
-        querystring : 'js/querystring.js',
         buffer      : 'js/buffer.js',
+        buffer2     : 'buffer/buffer.js',
         is          : 'js/is.js',
         handle      : 'js/handle.js',
         sockets     : 'js/socket.js',
@@ -235,21 +276,28 @@ if (typeof Number.isFinite !== 'function') {
         module      : 'js/require.js',
         threads     : 'js/threads.js',
         http_parser : 'js/http-parser.js',
-        readline    : 'js/readline.js',
         socket      : 'js/socket.js',
         worker      : 'js/worker.js',
-        fs          : 'js/fs.js',
+        // fs          : 'js/fs.js',
         uv          : 'js/uv.js',
-        
-        //node modules
-        events      : 'js/node/events.js',
-        timers      : 'js/node/timers.js',
-        net         : 'js/node/net.js',
-        dns         : 'js/node/dns.js',
-        cluster     : 'js/node/cluster.js',
-        string_decoder      : 'js/node/string_decoder.js',
 
+        //node modules
         'internal/util'     : 'js/node/internal/util.js',
+        util                : 'js/node/util.js',
+        path                : 'js/node/path.js',
+        fs                  : 'js/node/fs.js',
+        url                 : 'js/node/url.js',
+        readline            : 'js/node/readline.js',
+        querystring         : 'js/node/querystring.js',
+        assert              : 'js/node/assert.js',
+        console             : 'js/node/console.js',
+        constants           : 'js/node/constants.js',
+        events              : 'js/node/events.js',
+        timers              : 'js/node/timers.js',
+        net                 : 'js/node/net.js',
+        dns                 : 'js/node/dns.js',
+        cluster             : 'js/node/cluster.js',
+        string_decoder      : 'js/node/string_decoder.js',
         tty                 : 'js/node/tty.js',
         stream              : 'js/node/stream.js',
         _stream_readable    : 'js/node/stream/_stream_readable.js',
@@ -258,9 +306,9 @@ if (typeof Number.isFinite !== 'function') {
         _stream_transform   : 'js/node/stream/_stream_transform.js',
         _stream_passthrough : 'js/node/stream/_stream_passthrough.js'
     };
-    
+
     NativeModule._cache  = {};
-    
+
     NativeModule.require = function(id, p) {
         if (id == 'native_module') {
             return NativeModule;
@@ -285,24 +333,24 @@ if (typeof Number.isFinite !== 'function') {
         nativeModule.compile();
         return nativeModule.exports;
     };
-    
+
     NativeModule.getCached = function(id) {
         return NativeModule._cache[id];
     };
-    
+
     NativeModule.exists = function(id) {
         return NativeModule._source.hasOwnProperty(id);
     };
-    
+
     NativeModule.getSource = function(id) {
         var filename = NativeModule._source[id];
         return process.readFile(filename);
     };
-    
+
     NativeModule.wrap = function(script) {
         return NativeModule.wrapper[0] + script + NativeModule.wrapper[1];
     };
-    
+
     NativeModule.wrapper = [
         '(function (exports, require, module, __filename, __dirname) {' +
             'var fn = (function(){',
@@ -315,7 +363,7 @@ if (typeof Number.isFinite !== 'function') {
             '};\n'+
         '});'
     ];
-    
+
     NativeModule.prototype.compile = function() {
         var source = NativeModule.getSource(this.id);
         source = NativeModule.wrap(source);
@@ -327,13 +375,13 @@ if (typeof Number.isFinite !== 'function') {
         }
         this.loaded = true;
     };
-    
+
     NativeModule.prototype.cache = function() {
         NativeModule._cache[this.id] = this;
     };
-    
+
     startup();
-    
+
     var _run_looop = function(){
         var main_loop = process.main_loop;
         var loop = process.binding('loop');
@@ -344,13 +392,29 @@ if (typeof Number.isFinite !== 'function') {
         loop.timer_start(gcHandle, 5000, 5000);
 
         try {
-            loop.run(main_loop, 0);
+            var i = 0;
+            var n = 0;
+            while(1){
+                
+                for (i = 0; i < 16; i++){
+                    process._tickCallBack();
+                    n = loop.run(main_loop, 1);
+                    if (n == 0) break;
+                }
+
+                process._tickCallBack();
+                n = loop.run(main_loop, 1);
+                if (n == 0) break;
+                process.sleep(1);
+            }
+
+            // loop.run(main_loop, 0);
             process.emit('exit');
         } catch (e){
             process.reportError(e);
         }
     };
-    
+
     var r = NativeModule.require('module');
     var argv = process.argv;
     if (argv[1]) {
@@ -367,6 +431,6 @@ if (typeof Number.isFinite !== 'function') {
             r.require(process.argv[1]);
         }
     }
-    
+
     _run_looop();
 })(process);

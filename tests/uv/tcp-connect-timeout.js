@@ -35,6 +35,6 @@ function close_cb() {
 })();
 
 process.on("exit", function(){
-    ASSERT(connect_cb_called === 1);
-    ASSERT(close_cb_called === 1);
+    ASSERT.equal(connect_cb_called,1);
+    ASSERT.equal(close_cb_called, 1);
 });

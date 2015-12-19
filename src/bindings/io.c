@@ -3,7 +3,7 @@
 #include <sys/types.h>
 
 #ifdef _WIN32
-    #include "../../include/ansi/ANSI.h"
+    #include "ansi/ANSI.h"
     #include <io.h>
 #else
     #include <unistd.h>
@@ -133,35 +133,35 @@ COMO_METHOD(como_io_can_write) {
 }
 
 static const duk_function_list_entry como_io_funcs[] = {
-    { "read"      , como_io_read,      3 },
-    { "open"      , como_io_open,      3 },
-    { "write"     , como_io_write,     2 },
-    { "can_read"  , como_io_can_read,  2 },
-    { "can_write" , como_io_can_write, 2 },
-    { NULL, NULL  , 0 }
+    {"read", como_io_read,              3},
+    {"open", como_io_open,              3},
+    {"write", como_io_write,            2},
+    {"can_read", como_io_can_read,      2},
+    {"can_write", como_io_can_write,    2},
+    {NULL, NULL,                        0}
 };
 
 static const duk_number_list_entry como_io_constants[] = {
-    { "O_APPEND" , O_APPEND },
-    { "O_CREAT"  , O_CREAT },
-    { "O_EXCL"   , O_EXCL },
-    { "O_RDONLY" , O_RDONLY },
-    { "O_RDWR"   , O_RDWR },
+    {"O_APPEND", O_APPEND},
+    {"O_CREAT", O_CREAT},
+    {"O_EXCL", O_EXCL},
+    {"O_RDONLY", O_RDONLY},
+    {"O_RDWR", O_RDWR},
     
     #ifdef O_SYNC
-        { "O_SYNC"   , O_SYNC },
+    {"O_SYNC", O_SYNC},
     #else
-        { "O_SYNC"   , 0 },
+    {"O_SYNC", 0},
     #endif
     
-    { "O_TRUNC"  , O_TRUNC },
-    { "O_WRONLY" , O_WRONLY },
+    {"O_TRUNC", O_TRUNC},
+    {"O_WRONLY", O_WRONLY},
     
     #ifdef O_SYMLINK
-        { "O_SYMLINK" , O_SYMLINK },
+    {"O_SYMLINK", O_SYMLINK},
     #endif
     
-    { NULL, 0 }
+    {NULL, 0}
 };
 
 static int init_binding_io(duk_context *ctx) {

@@ -16,7 +16,7 @@ if (!isWin()){
     $extra .= "-lws2_32";
 }
 
-my $mbedFolder = '../include/mbedtls/';
+my $mbedFolder = '../libs/mbedtls/';
 
 opendir(DIR, getFile( $mbedFolder . 'library')) or die $!;
 

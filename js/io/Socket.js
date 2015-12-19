@@ -99,8 +99,8 @@ Socket.prototype.stream_io = function(events){
                 this.stream_eof(buf);
             } else {
                 if (err === errno.EWOULDBLOCK || err === errno.EAGAIN ){
-                    //FIXME: do nothing
-                    throw new Error('wouldblock');
+                    //do nothing
+                    this.read_cb(0, buf);
                 } else {
                     throw new Error('error ' + err);
                 }
@@ -148,7 +148,7 @@ Socket.prototype.stream_io = function(events){
 
 Socket.prototype.stream_eof = function(buf){
     this.eof = true;
-    this.io_watcher.remove(loop.POLLIN);
+    this.io_watcher.stop(loop.POLLIN);
     if (!this.io_watcher.active(loop.POLLOUT)){
         this.close();
     }
@@ -159,7 +159,7 @@ Socket.prototype.stream_eof = function(buf){
 Socket.prototype.shutdown = function(){
     if (this.stream_shutdown) return;
     this.stream_shutdown = true;
-    this.io_watcher.remove(loop.POLLIN);
+    this.io_watcher.stop(loop.POLLIN);
     if (!this.io_watcher.active(loop.POLLOUT)){
         this.close();
     }

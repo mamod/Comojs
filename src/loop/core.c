@@ -15,6 +15,7 @@
 static int64_t handle_id = 0;
 
 inline void handle_start (evHandle *h){
+    assert((h->flags & HANDLE_CLOSING) == 0);
     if ((h->flags & HANDLE_ACTIVE) != 0) return;
     h->flags |= HANDLE_ACTIVE;
     if ((h->flags & HANDLE_REF) != 0) {
@@ -23,6 +24,7 @@ inline void handle_start (evHandle *h){
 }
 
 inline void handle_stop (evHandle *h) {
+    assert((h->flags & HANDLE_CLOSING) == 0);
     if ((h->flags & HANDLE_ACTIVE) == 0) return;
     h->flags &= ~HANDLE_ACTIVE;
     if ((h->flags & HANDLE_REF) != 0) {
@@ -32,14 +34,13 @@ inline void handle_stop (evHandle *h) {
 
 inline void handle_close (evHandle *h){
     if ((h->flags & HANDLE_CLOSING) != 0) return;
-    h->flags |= HANDLE_CLOSING;
     if (h->type == EV_IO){
         io_close(h);
     } else if (h->type == EV_TIMER){
         timer_close(h);
     } else {
-        h->flags |= HANDLE_CLOSING;
         handle_stop(h);
+        h->flags |= HANDLE_CLOSING;
         QUEUE_REMOVE(&h->queue);
         QUEUE_INSERT_TAIL(&h->loop->closing_queue, 
                           &h->queue);
@@ -165,11 +166,11 @@ int timer_stop (evHandle *handle) {
 }
 
 int timer_close (evHandle *handle) {
-    handle->flags |= HANDLE_CLOSING;
     timer_stop(handle);
     QUEUE_REMOVE(&handle->queue);
     QUEUE_INSERT_TAIL(&handle->loop->closing_queue, 
                       &handle->queue);
+    handle->flags |= HANDLE_CLOSING;
     return 0;
 }
 
@@ -185,7 +186,7 @@ int timer_again(evHandle *handle) {
 
 int handle_call(evHandle *handle) {
     if (handle->cb == NULL) return 0;
-    QUEUE_INSERT_TAIL(&handle->loop->handle_queue, 
+    QUEUE_INSERT_TAIL(&handle->loop->handle_queue,
                       &handle->queue);
     return 0;
 }
@@ -344,7 +345,11 @@ int loop_start (evLoop *loop, int type){
         }
 
         /* run once */
-        if (type == 1){ break; }
+        if (type == 1){
+            loop_update_time(loop);
+            loop_run_timers(loop);
+            break; 
+        }
     }
 
     /* check closing handles one last time*/
