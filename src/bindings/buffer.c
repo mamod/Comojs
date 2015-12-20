@@ -1,3 +1,9 @@
+
+static const unsigned int kMaxLength =
+    sizeof(duk_int32_t) == sizeof(duk_intptr_t) ? 0x3fffffff : 0x7fffffff;
+
+// static const unsigned int kMaxLengthString = kMaxLength / 4;
+
 #if !defined(MIN)
     #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
@@ -825,6 +831,11 @@ COMO_METHOD(como_bytelength_utf8) {
     return 1;
 }
 
+COMO_METHOD(como_kMaxLength) {
+    duk_push_number(ctx, kMaxLength);
+    return 1;
+}
+
 
 static const duk_function_list_entry como_buffer_funcs[] = {
     {"slice", como_buffer_slice,                   4},
@@ -844,6 +855,7 @@ static const duk_function_list_entry como_buffer_funcs[] = {
     {"utf8Write", como_utf8_write,                 3},
     {"binaryWrite", como_binary_write,             3},
     {"createFromString", como_buffer_string,       2},
+
     {NULL, NULL,                                   0}
 };
 
@@ -862,9 +874,17 @@ static const duk_number_list_entry como_buffer_constants[] = {
 
 static int init_binding_buffer(duk_context *ctx) {
     duk_push_object(ctx);
+
+    duk_push_number(ctx, kMaxLength);
+    duk_put_prop_string(ctx, -2, "kMaxLength");
+
+    duk_push_number(ctx, kMaxLength / 4);
+    duk_put_prop_string(ctx, -2, "kStringMaxLength");
+
     duk_put_function_list(ctx, -1, como_buffer_funcs);
     duk_push_object(ctx);
     duk_put_number_list(ctx, -1, como_buffer_constants);
     duk_put_prop_string(ctx, -2, "encodings");
+
     return 1;
 }
