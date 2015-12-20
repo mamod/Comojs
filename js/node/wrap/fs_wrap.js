@@ -60,122 +60,6 @@ exports.close = function(fd, req){
     if (err) throw(err);
 };
 
-exports.stat = function(file, req){
-
-    var err = null;
-    var stat;
-
-    file = file.replace(/^\\\\\?\\/, '');
-
-    var s = posix.stat(file);
-    if (s === null){
-        err = _throw(process.errno, 'stat', file);
-    }
-
-    if (s && !err){
-        stat = new statFunction(s.dev,
-            s.mode,
-            s.nlink,
-            s.uid,
-            s.gid,
-            s.rdev,
-            s.blksize,
-            s.ino,
-            s.size,
-            s.blocks,
-            s.atime * 1000, //to millisecond
-            s.mtime * 1000, //to millisecond
-            s.ctime * 1000, //to millisecond
-            s.birthtim_msec
-        );
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err, stat);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-    return stat;
-};
-
-exports.fstat = function(fd, req){
-    var err;
-    var stat;
-    var s = posix.fstat(fd);
-    if (s === null){
-        err = _throw(process.errno, 'stat');
-    }
-
-    if (s && !err){
-        stat = new statFunction(s.dev,
-            s.mode,
-            s.nlink,
-            s.uid,
-            s.gid,
-            s.rdev,
-            s.blksize,
-            s.ino,
-            s.size,
-            s.blocks,
-            s.atime * 1000, //to millisecond
-            s.mtime * 1000, //to millisecond
-            s.ctime * 1000, //to millisecond
-            s.birthtim_msec
-        );
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err, stat);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-    return stat;
-};
-
-exports.lstat = function(file, req){
-    file = file.replace(/^\\\\\?\\/, '');
-    var err;
-    var stat;
-    var s = posix.lstat(file);
-    if (s === null){
-        err = _throw(process.errno, 'stat');
-    }
-
-    if (s && !err){
-        stat = new statFunction(s.dev,
-            s.mode,
-            s.nlink,
-            s.uid,
-            s.gid,
-            s.rdev,
-            s.blksize,
-            s.ino,
-            s.size,
-            s.blocks,
-            s.atime * 1000, //to millisecond
-            s.mtime * 1000, //to millisecond
-            s.ctime * 1000, //to millisecond
-            s.birthtim_msec
-        );
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err, stat);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-    return stat;
-};
-
 exports.read = function(fd, buffer, offset, length, position, req){
     offset = offset || 0;
     length = length || buffer.byteLength;
@@ -269,202 +153,128 @@ exports.writeBuffer = exports.writeString = function(fd, data, offset, length, p
     return nwritten;
 };
 
-exports.unlink = function(path, req){
-    var err = null;
-    if (!posix.unlink(path)){
-        err = _throw(process.errno, 'unlink', path);
+function _normalizePath (args){
+    if (typeof args[0] === 'string'){
+    args[0] = args[0].replace(/^\\\\\?\\/, '');
     }
+    return args;
+}
 
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-};
-
-exports.access = function(path, mode, req){
-    var err = null;
-
-    if (!util.isString(path)){
-        throw new Error("path must be a string");
-    }
-
-    if (!posix.access(path, mode)){
-        err = _throw(process.errno, 'unlink', path);
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-};
-
-exports.chmod = function(path, mode, req){
-    var err = null;
-    if (!posix.chmod(path, mode)){
-        err = _throw(process.errno, 'chmod', path);
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-};
-
-exports.fchmod = function(fd, mode, req){
-    var err = null;
-    if (!posix.fchmod(fd, mode)){
-        err = _throw(process.errno, 'fchmod');
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-};
-
-exports.mkdir = function(path, mode, req){
-    var err = null;
-    if (!posix.mkdir(path, mode)){
-        err = _throw(process.errno, 'mkdir ' + path, path);
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-};
-
-exports.rmdir = function(path, mode, req){
-    var err = null;
-    if (!posix.rmdir(path, mode)){
-        err = _throw(process.errno, 'rmdir', path);
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-};
-
-exports.fdatasync = exports.fsync = function(fd, req){
-    var err = null;
-    if (!posix.fsync(fd)){
-        err = _throw(process.errno, 'fsync');
-    }
-
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
-
-    if (err) throw(err);
-};
-
-exports.link = function(src, dest, req){
-    var err = null;
-    if (!util.isString(src)){
+function _normalizeLinkArgs (args) {
+    //src => args[0]
+    if (!util.isString(args[0])){
         throw new Error('src path must be a string');
     }
 
-    if (!util.isString(dest)){
+    //dest => args[1]
+    if (!util.isString(args[1])){
         throw new Error('dest path must be a string');
     }
 
-    src = src.replace(/^\\\\\?\\/, '');
-    dest = dest.replace(/^\\\\\?\\/, '');
+    args[0] = _normalizePath(args[0]);
+    args[1] = _normalizePath(args[1]);
 
-    
-    // console.log(arguments);
-    if (posix.link(src, dest) === null){
-        err = _throw(process.errno, 'link');
+    return args;
+}
+
+function _checkAccessArgs (args){
+     if (!util.isString(args[0])){
+        throw new Error("path must be a string");
     }
+    return args;
+}
 
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
+[
+    ['close', 2],
+    ['ftruncate', 3],
+    ['rmdir', 3],
+    ['mkdir', 3],
+    ['fchmod', 3],
+    ['chmod', 3],
+    ['unlink', 2],
+    ['symlink', 4],
+    ['readdir', 2],
+    ['fsync', 2],
+    ['link', 3, _normalizeLinkArgs],
+    ['access', 3, _checkAccessArgs]
+].forEach(function(obj){
+    var fn         = obj[0];
+    var argsLength = obj[1];
+    var _normalize = obj[2] || _normalizePath;
 
-    if (err) throw err;
-};
+    exports[fn] = function(){
+        var args = [].slice.call(arguments);
+        var req;
+        var err = null;
 
-exports.readdir = function(path, req){
-    path = path.replace(/^\\\\\?\\/, '');
-    var err = null;
-    var result = posix.readdir(path);
-    if (!result){
-        err = _throw(process.errno, 'readdir', path);
-    }
+        if (args.length === argsLength){
+            req = args.pop();
+        }
 
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err, result);
-        });
-        return;
-    }
+        args = _normalize(args);
+        // args[0] = _normalizePath(args[0]);
 
-    if (err) throw(err);
-    return result;
-};
+        var ret = posix[fn].apply(null, args);
 
-exports.ftruncate = function(fd, len, req){
-    // console.log(arguments);
-    var err = null;
-    if (posix.ftruncate(fd, len) === null){
-        err = _throw(process.errno, 'ftruncate');
-    }
+        if (ret === null){
+            err = _throw(process.errno, fn, args[0]);
+        }
 
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
+        if (req){
+            process.nextTick(function(){
+                req.oncomplete(err, ret);
+            });
+            return;
+        }
 
-    if (err) throw err;
-    return true;
-};
+        if (err) throw err;
+        return ret;
+    };
+});
 
-exports.symlink = function(target, linkpath, type, req){
-    var err = null;
-    if (posix.symlink(target, linkpath) === null){
-        err = _throw(process.errno, 'symlink');
-    }
+exports.fdatasync = exports.fsync;
 
-    if (req){
-        process.nextTick(function(){
-            req.oncomplete(err);
-        });
-        return;
-    }
 
-    if (err) throw err;
-    return true;
-};
+['lstat', 'fstat', 'stat'].forEach(function(fn){
+    exports[fn] = function(file, req){
+        var err = null;
+        var stat;
+
+        if (typeof file === 'string'){
+            file = file.replace(/^\\\\\?\\/, '');
+        }
+
+        var s = posix[fn](file);
+        if (s === null){
+            err = _throw(process.errno, fn, file);
+        }
+
+        if (s && !err){
+            stat = new statFunction(s.dev,
+                s.mode,
+                s.nlink,
+                s.uid,
+                s.gid,
+                s.rdev,
+                s.blksize,
+                s.ino,
+                s.size,
+                s.blocks,
+                s.atime * 1000, //to millisecond
+                s.mtime * 1000, //to millisecond
+                s.ctime * 1000, //to millisecond
+                s.birthtim_msec
+            );
+        }
+
+        if (req){
+            process.nextTick(function(){
+                req.oncomplete(err, stat);
+            });
+            return;
+        }
+
+        if (err) throw err;
+        return stat;
+    };
+});
