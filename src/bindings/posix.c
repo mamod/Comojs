@@ -1,7 +1,26 @@
 #ifdef _WIN32
 
 #define fsync(fd) _commit(fd)
-#define ftruncate(a,b) _chsize_s(a,b)
+
+int como__ftruncate (int fd, long pos){
+    if ( lseek(fd, pos, SEEK_SET) < 0 ){
+        return -1;
+    }
+
+    int handle = _get_osfhandle(fd);
+
+    if (handle == -1){
+        errno = EBADF;
+        return -1;
+    }
+
+    if (SetEndOfFile((HANDLE)handle) == 0){
+        errno = GetLastError();
+        return -1;
+    }
+
+    return 0;
+}
 
 size_t pread (int fd, void *buffer, size_t len, long position){
     lseek(fd, position, SEEK_SET);
@@ -9,6 +28,29 @@ size_t pread (int fd, void *buffer, size_t len, long position){
     return nread;
 }
 
+int como__link (const char *oldpath, const char *newpath){
+
+    HINSTANCE hinst;
+    hinst = LoadLibrary ("KERNEL32");
+    FARPROC _link;
+    _link = GetProcAddress (hinst, "CreateHardLinkA");
+
+    if (_link == NULL){
+        errno = ENOSYS;
+        return -1;
+    }
+
+    if (_link (newpath, oldpath, NULL) == FALSE) {
+        errno = GetLastError();
+        return -1;
+    }
+
+    return 0;
+}
+
+#else
+#define como__link(a,b) link(a,b)
+#define como__ftruncate(a,b) ftruncate(a,b)
 #endif
 
 int como__stat (duk_context *ctx, const char *filename, int fd, int lst) {
@@ -237,7 +279,7 @@ COMO_METHOD(como_posix_read) {
     int isBufferRead = 0;
     void *buffer;
     size_t len;
-    long position;
+    int position;
 
     if (duk_is_number(ctx, 1)){
         len = duk_require_uint(ctx, 1);
@@ -278,7 +320,7 @@ COMO_METHOD(como_posix_read) {
 
         if (duk_is_number(ctx, 3)){
             isPread = 1;
-            position = duk_get_number(ctx, 3);
+            position = (long)duk_get_int(ctx, 3);
         }
 
         buffer = buffer + off;
@@ -379,8 +421,31 @@ int como__readdir(duk_context *ctx, const char *dir, size_t length_of_dir) {
         return -1;
     }
 
+
+    //is this a directory?
+    struct stat s;
+    if( stat(dir,&s) != -1 ) {
+        if( !(s.st_mode & S_IFDIR) ) {
+            errno = ENOTDIR;
+            return -1;
+        }
+    } else {
+        errno = ENOENT;
+        return -1;
+    }
+
+    void *newdir = duk_push_fixed_buffer(ctx, length_of_dir + 2);
+    memcpy(newdir, dir, length_of_dir + 2);
+
+    newdir[length_of_dir + 0] = '\\';
+    newdir[length_of_dir + 1] = '*';
+
+    // printf("new created dir %s\n", newdir);
     // Find the first file in the directory.
-    hFind = FindFirstFile(dir, &ffd);
+    hFind = FindFirstFile(newdir, &ffd);
+
+    //pop pushed buffer
+    duk_pop(ctx);
 
     if (hFind == INVALID_HANDLE_VALUE) {
         errno = ENOENT;
@@ -388,7 +453,6 @@ int como__readdir(duk_context *ctx, const char *dir, size_t length_of_dir) {
     }
 
     do {
-        
         if (strcmp(ffd.cFileName, ".") == 0 ||
             strcmp(ffd.cFileName, "..") == 0) {
             continue;
@@ -406,7 +470,9 @@ int como__readdir(duk_context *ctx, const char *dir, size_t length_of_dir) {
     FindClose(hFind);
 
     if (errno != ERROR_NO_MORE_FILES) return -1;
-    #else
+
+    #else //posix
+
     DIR *dp;
     struct dirent *ep;
     dp = opendir (dir);
@@ -436,6 +502,43 @@ COMO_METHOD(como_posix_readdir) {
     return 1;
 }
 
+COMO_METHOD(como_posix_link) {
+    size_t length, length2;
+    const char *src = duk_require_lstring(ctx, 0, &length);
+    const char *dest = duk_require_lstring(ctx, 1, &length2);
+    if (como__link(src, dest) == -1){
+        COMO_SET_ERRNO_AND_RETURN(ctx, errno);
+    }
+    duk_push_true(ctx);
+    return 1;
+}
+
+COMO_METHOD(como_posix_ftruncate) {
+
+    int fd = duk_require_int(ctx, 0);
+    long length = (long)duk_require_uint(ctx, 1);
+
+    //win _chsize returns nonzero on error
+    if (como__ftruncate(fd, length) == -1){
+        COMO_SET_ERRNO_AND_RETURN(ctx, errno);
+    }
+
+    duk_push_true(ctx);
+    return 1;
+}
+
+COMO_METHOD(como_posix_symlink) {
+    #ifndef _WIN32
+    const char *src = duk_require_string(ctx, 0);
+    const char *dest = duk_require_string(ctx, 1);
+    if (symlink(src, dest) == -1){
+        COMO_SET_ERRNO_AND_RETURN(ctx, errno);
+    }
+    #endif
+    duk_push_true(ctx);
+    return 1;
+}
+
 static const duk_function_list_entry como_posix_funcs[] = {
     {"stat", como_posix_stat,                1},
     {"fstat", como_posix_fstat,              1},
@@ -453,6 +556,9 @@ static const duk_function_list_entry como_posix_funcs[] = {
     {"readdir", como_posix_readdir,          1},
     {"fsync", como_posix_fsync,              1},
     {"writeBuffer", como_posix_writeBuffer,  3},
+    {"link", como_posix_link,                2},
+    {"ftruncate", como_posix_ftruncate,      2},
+    {"symlink", como_posix_symlink,          2},
     {NULL, NULL, 0}
 };
 

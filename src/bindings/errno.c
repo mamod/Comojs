@@ -16,12 +16,15 @@ static const duk_number_list_entry errno_constants[] = {
     { "EISDIR"             , EISDIR },
     { "ENOTDIR"            , ENOTDIR },
     { "ENOENT"             , ENOENT },
+    { "ENOMEM"             , ENOMEM },
     { "ENOTEMPTY"          , ENOTEMPTY },
     { "EPERM"              , EPERM },
     { "ENOSPC"             , ENOSPC },
     { "ENXIO"              , ENXIO },
     { "EIO"                , EIO },
     { "EROFS"              , EROFS },
+    {"EMLINK"              , EMLINK },
+    {"EFBIG"               , EFBIG },
     { "EADDRINUSE"         , EADDRINUSE },
     { "EACCES"             , EACCES },
     { "ENFILE"             , ENFILE  },
@@ -50,6 +53,11 @@ static const duk_number_list_entry errno_constants[] = {
     #ifdef WSAEINVAL
     { "WSAEINVAL"          , WSAEINVAL},
     #endif
+
+    #ifdef ELOOP
+    { "ELOOP"              , ELOOP },
+    #endif
+
     { NULL, 0 }
 };
 
