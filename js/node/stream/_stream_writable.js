@@ -170,7 +170,7 @@ function writeAfterEnd(stream, cb) {
 function validChunk(stream, state, chunk, cb) {
   var valid = true;
 
-  if (typeof chunk !== 'buffer' &&
+  if (!(Buffer.isBuffer(chunk)) &&
       typeof chunk !== 'string' &&
       chunk !== null &&
       chunk !== undefined &&

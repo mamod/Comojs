@@ -589,7 +589,7 @@ fs.openSync = function(path, flags, mode) {
 };
 
 fs.read = function(fd, buffer, offset, length, position, callback) {
-  if (!(util.isBuffer(buffer))) {
+  if (!(Buffer.isBuffer(buffer))) {
     // legacy string interface (fd, length, position, encoding, callback)
     var cb = arguments[4],
         encoding = arguments[3];

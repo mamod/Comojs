@@ -188,7 +188,7 @@ function _write(stream) {
         var n;
 
         //TODO check if array
-        if (typeof buffer === "object"){
+        if (Array.isArray(buffer)){
             //this is an array of buffers to write
             nbufs = buffer.length;
         }
@@ -450,7 +450,7 @@ Stream.prototype.write = function(buf, cb, send_handle){
     var sockfd = self.fd;
     assert(sockfd > 0);
 
-    if (typeof buf === "object"){
+    if (Array.isArray(buf)){
         var last = buf.pop();
         buf.forEach(function(b){
             self.write(b);

@@ -6,6 +6,7 @@ global.COUNTER_NET_SERVER_CONNECTION = function(){};
 global.COUNTER_NET_SERVER_CONNECTION_CLOSE = function(){};
 global.DTRACE_NET_STREAM_END = function(){};
 global.LTTNG_NET_STREAM_END = function(){};
+global.NODE_BUFFER = Buffer;
 
 //definegetter polufill
 if (typeof Object.prototype.__defineGetter__ === 'undefined') {
@@ -96,7 +97,6 @@ if (typeof Number.isFinite !== 'function') {
         var path = NativeModule.require('path');
         var execPath = path.resolve(process.cwd() + '/' + process.argv[0]);
         process.execPath = execPath;
-        global.DUK_Buffer = Buffer;
         global.Buffer = NativeModule.require('buffer').Buffer;
         startup.nextTick();
         startup.globalTimeouts();
@@ -267,8 +267,7 @@ if (typeof Number.isFinite !== 'function') {
     NativeModule._source = {
         //core modules
         loop        : 'js/loop.js',
-        buffer      : 'js/buffer.js',
-        buffer2     : 'buffer/buffer.js',
+        buffer      : 'js/node/buffer.js',
         is          : 'js/is.js',
         handle      : 'js/handle.js',
         sockets     : 'js/socket.js',
@@ -278,7 +277,6 @@ if (typeof Number.isFinite !== 'function') {
         http_parser : 'js/http-parser.js',
         socket      : 'js/socket.js',
         worker      : 'js/worker.js',
-        // fs          : 'js/fs.js',
         uv          : 'js/uv.js',
 
         //node modules
