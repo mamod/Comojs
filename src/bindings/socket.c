@@ -622,10 +622,10 @@ COMO_METHOD(como_sock_send) {
     const char *buf;
     size_t length;
 
-    if (duk_get_type(ctx, 1) == DUK_TYPE_BUFFER){
-        buf = duk_get_buffer(ctx, 1, &length);
+    if (duk_get_type(ctx, 1) == DUK_TYPE_STRING){
+        buf = duk_get_lstring(ctx, 1, &length);
     } else {
-        buf = duk_require_lstring(ctx, 1, &length);
+        buf = duk_require_buffer_data(ctx, 1, &length);
     }
 
     size_t len      = (size_t)duk_require_int(ctx, 2);

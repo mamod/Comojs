@@ -613,7 +613,7 @@ Socket.prototype.__defineGetter__('localPort', function() {
 
 
 Socket.prototype.write = function(chunk, encoding, cb) {
-  if (typeof chunk !== 'string' && typeof chunk !== 'buffer')
+  if (typeof chunk !== 'string' && (!Buffer.isBuffer(chunk)))
     throw new TypeError('Invalid data');
   return stream.Duplex.prototype.write.apply(this, arguments);
 };

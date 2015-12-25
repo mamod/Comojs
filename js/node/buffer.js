@@ -1,6 +1,6 @@
 /* eslint-disable require-buffer */
 'use strict';
-
+exports.Buffer = Buffer;
 var binding;
 try {
 binding = process.binding('buffer_wrap');
@@ -8,7 +8,7 @@ binding = process.binding('buffer_wrap');
 binding = process.binding('buffer');
 }
 
-var internalUtil = require('./internal/util');
+var internalUtil = require('internal/util');
 var bindingObj = {};
 
 exports.Buffer = Buffer;
@@ -57,9 +57,7 @@ function Buffer(arg, encoding) {
 
   // Slightly less common case.
   if (typeof arg === 'string') {
-    var t = binding.createFromString(arg, encoding);
-    Object.setPrototypeOf(t, Buffer.prototype);
-    return t;
+    return binding.createFromString(arg, encoding);
   }
 
   // Unusual.
@@ -518,28 +516,33 @@ Buffer.prototype.includes = function includes(val, byteOffset, encoding) {
   return this.indexOf(val, byteOffset, encoding) !== -1;
 };
 
+//FIXME: fast implementation
+if (typeof NODE_BUFFER === 'undefined'){
+  Buffer.prototype.fill = NODE_BUFFER.prototype.fill;
+} else {
+  Buffer.prototype.fill = function fill(val, start, end) {
+    start = start >> 0;
+    end = (end === undefined) ? this.length : end >> 0;
 
-Buffer.prototype.fill = function fill(val, start, end) {
-  start = start >> 0;
-  end = (end === undefined) ? this.length : end >> 0;
+    if (start < 0 || end > this.length)
+      throw new RangeError('Out of range index');
+    if (end <= start)
+      return this;
 
-  if (start < 0 || end > this.length)
-    throw new RangeError('Out of range index');
-  if (end <= start)
+    if (typeof val !== 'string') {
+      val = val >>> 0;
+    } else if (val.length === 1) {
+      var code = val.charCodeAt(0);
+      if (code < 256)
+        val = code;
+    }
+
+    binding.fill(this, val, start, end);
+
     return this;
+  };
+}
 
-  if (typeof val !== 'string') {
-    val = val >>> 0;
-  } else if (val.length === 1) {
-    var code = val.charCodeAt(0);
-    if (code < 256)
-      val = code;
-  }
-
-  binding.fill(this, val, start, end);
-
-  return this;
-};
 
 
 // XXX remove in v0.13
@@ -950,19 +953,21 @@ Buffer.prototype.writeUInt16BE = function(value, offset, noAssert) {
   return offset + 2;
 };
 
-
-Buffer.prototype.writeUInt32LE = function(value, offset, noAssert) {
-  value = +value;
-  offset = offset >>> 0;
-  if (!noAssert)
-    checkInt(this, value, offset, 4, 0xffffffff, 0);
-  this[offset + 3] = (value >>> 24);
-  this[offset + 2] = (value >>> 16);
-  this[offset + 1] = (value >>> 8);
-  this[offset] = value;
-  return offset + 4;
-};
-
+if (typeof NODE_BUFFER !== 'undefined'){
+  Buffer.prototype.writeUInt32LE = NODE_BUFFER.prototype.writeUInt32LE;
+} else {
+  Buffer.prototype.writeUInt32LE = function(value, offset, noAssert) {
+    value = +value;
+    offset = offset >>> 0;
+    if (!noAssert)
+      checkInt(this, value, offset, 4, 0xffffffff, 0);
+    this[offset + 3] = (value >>> 24);
+    this[offset + 2] = (value >>> 16);
+    this[offset + 1] = (value >>> 8);
+    this[offset] = value;
+    return offset + 4;
+  };
+}
 
 Buffer.prototype.writeUInt32BE = function(value, offset, noAssert) {
   value = +value;
@@ -1086,49 +1091,61 @@ Buffer.prototype.writeInt32BE = function(value, offset, noAssert) {
   return offset + 4;
 };
 
+if (typeof NODE_BUFFER !== 'undefined'){
+  Buffer.prototype.writeFloatLE = NODE_BUFFER.prototype.writeFloatLE;
+} else {
+  Buffer.prototype.writeFloatLE = function writeFloatLE(val, offset, noAssert) {
+    val = +val;
+    offset = offset >>> 0;
+    if (!noAssert)
+      binding.writeFloatLE(this, val, offset);
+    else
+      binding.writeFloatLE(this, val, offset, true);
+    return offset + 4;
+  };
+}
 
-Buffer.prototype.writeFloatLE = function writeFloatLE(val, offset, noAssert) {
-  val = +val;
-  offset = offset >>> 0;
-  if (!noAssert)
-    binding.writeFloatLE(this, val, offset);
-  else
-    binding.writeFloatLE(this, val, offset, true);
-  return offset + 4;
-};
+if (typeof NODE_BUFFER !== 'undefined'){
+  Buffer.prototype.writeFloatBE = NODE_BUFFER.prototype.writeFloatBE;
+} else {
+  Buffer.prototype.writeFloatBE = function writeFloatBE(val, offset, noAssert) {
+    val = +val;
+    offset = offset >>> 0;
+    if (!noAssert)
+      binding.writeFloatBE(this, val, offset);
+    else
+      binding.writeFloatBE(this, val, offset, true);
+    return offset + 4;
+  };
+}
 
+if (typeof NODE_BUFFER !== 'undefined'){
+  Buffer.prototype.writeDoubleLE = NODE_BUFFER.prototype.writeDoubleLE;
+} else {
+  Buffer.prototype.writeDoubleLE = function writeDoubleLE(val, offset, noAssert) {
+    val = +val;
+    offset = offset >>> 0;
+    if (!noAssert)
+      binding.writeDoubleLE(this, val, offset);
+    else
+      binding.writeDoubleLE(this, val, offset, true);
+    return offset + 8;
+  };
+}
 
-Buffer.prototype.writeFloatBE = function writeFloatBE(val, offset, noAssert) {
-  val = +val;
-  offset = offset >>> 0;
-  if (!noAssert)
-    binding.writeFloatBE(this, val, offset);
-  else
-    binding.writeFloatBE(this, val, offset, true);
-  return offset + 4;
-};
-
-
-Buffer.prototype.writeDoubleLE = function writeDoubleLE(val, offset, noAssert) {
-  val = +val;
-  offset = offset >>> 0;
-  if (!noAssert)
-    binding.writeDoubleLE(this, val, offset);
-  else
-    binding.writeDoubleLE(this, val, offset, true);
-  return offset + 8;
-};
-
-
-Buffer.prototype.writeDoubleBE = function writeDoubleBE(val, offset, noAssert) {
-  val = +val;
-  offset = offset >>> 0;
-  if (!noAssert)
-    binding.writeDoubleBE(this, val, offset);
-  else
-    binding.writeDoubleBE(this, val, offset, true);
-  return offset + 8;
-};
+if (typeof NODE_BUFFER !== 'undefined'){
+  Buffer.prototype.writeDoubleBE = NODE_BUFFER.prototype.writeDoubleBE;
+} else {
+  Buffer.prototype.writeDoubleBE = function writeDoubleBE(val, offset, noAssert) {
+    val = +val;
+    offset = offset >>> 0;
+    if (!noAssert)
+      binding.writeDoubleBE(this, val, offset);
+    else
+      binding.writeDoubleBE(this, val, offset, true);
+    return offset + 8;
+  };
+}
 
 
 // /* eslint-disable require-buffer */

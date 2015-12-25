@@ -600,8 +600,8 @@ function isPrimitive(arg) {
 }
 exports.isPrimitive = isPrimitive;
 
-function isBuffer(arg) {
-  return typeof arg === 'buffer';
+function isBuffer(b) {
+  return b instanceof Buffer;
 }
 exports.isBuffer = isBuffer;
 
