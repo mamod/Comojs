@@ -13,6 +13,7 @@ exports.setupBufferJS = function(proto, obj){
     proto.base64Slice  = binding.base64Slice;
     proto.binarySlice  = binding.asciiSlice;
     proto.utf8Slice  = binding.utf8Slice;
+    proto.ucs2Slice  = binding.ucs2Slice;
     proto.utf8Slice    = function(s,e){
         return NODE_BUFFER.prototype.toString.call(this, 'utf8', s, e);
     };

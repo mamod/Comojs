@@ -318,6 +318,21 @@ COMO_METHOD(como_buffer_utf8_slice) {
     return 1;
 }
 
+COMO_METHOD(como_buffer_ucs2_slice) {
+    COMO_SLICE_START
+    length /= 2;
+    char *dst = duk_push_fixed_buffer(ctx, length);
+    size_t i;
+    size_t k;
+    for (i = 0, k = 0; i < length; i += 1, k += 2) {
+        const uint8_t lo = (uint8_t)(src[k + 0]);
+        const uint8_t hi = (uint8_t)(src[k + 1]);
+        dst[i] = lo | hi << 8;
+    }
+    COMO_SLICE_END
+    return 1;
+}
+
 /*=============================================================================
   Write/decode functions
  ============================================================================*/
@@ -611,6 +626,7 @@ static const duk_function_list_entry como_buffer_funcs[] = {
     {"base64Slice", como_buffer_base64_slice,          2},
     {"asciiSlice", como_buffer_ascii_slice,            2},
     {"utf8Slice", como_buffer_utf8_slice,              2},
+    {"ucs2Slice", como_buffer_ucs2_slice,              2},
 
     {"utf8Write", como_buffer_utf8_write,              3},
     {"hexWrite", como_buffer_hex_write,                3},
